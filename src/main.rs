@@ -107,9 +107,8 @@ fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, SgFailed)>> {
         return Err(OneOf::new(IoError(err)));
     }
 
-    // Collect and sort patch files and ast-grep rule files
-    let mut patches: Vec<PathBuf> = Vec::new();
-    let mut sg_rules: Vec<PathBuf> = Vec::new();
+    // Collect stitch files (patches and ast-grep rules)
+    let mut stitch_files: Vec<PathBuf> = Vec::new();
 
     for entry in fs::read_dir(&stitches_dir).map_err(|e| OneOf::new(IoError(e)))? {
         let entry = match entry {
@@ -118,16 +117,14 @@ fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, SgFailed)>> {
         };
         let path = entry.path();
         match path.extension().and_then(|ext| ext.to_str()) {
-            Some("patch") => patches.push(path),
-            Some("yaml" | "yml") => sg_rules.push(path),
+            Some("patch" | "yaml" | "yml") => stitch_files.push(path),
             _ => {}
         }
     }
 
-    patches.sort();
-    sg_rules.sort();
+    stitch_files.sort();
 
-    if patches.is_empty() && sg_rules.is_empty() {
+    if stitch_files.is_empty() {
         let err = Command::new(rustc).args(rustc_args).exec();
         return Err(OneOf::new(IoError(err)));
     }
@@ -143,9 +140,8 @@ fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, SgFailed)>> {
     }
     copy_dir_recursive(&manifest_dir, &patched_dir).map_err(|e| OneOf::new(IoError(e)))?;
 
-    // Apply patches first, then ast-grep rules
-    apply_patches(&patched_dir, &patches).map_err(OneOf::broaden)?;
-    apply_sg_rules(&patched_dir, &sg_rules).map_err(OneOf::broaden)?;
+    // Apply stitch files in filename order
+    apply_stitches(&patched_dir, &stitch_files)?;
 
     // Rewrite rustc args: replace manifest_dir with patched_dir
     let manifest_dir_str = manifest_dir.to_string_lossy();
@@ -188,36 +184,40 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn apply_patches(dir: &Path, patches: &[PathBuf]) -> Result<(), OneOf<(IoError, PatchFailed)>> {
-    for patch in patches {
-        let status = Command::new("patch")
-            .args(["-s", "-p1"])
-            .arg("-i")
-            .arg(patch)
-            .arg("-d")
-            .arg(dir)
-            .status()
-            .map_err(|e| OneOf::new(IoError(e)))?;
+fn apply_stitches(
+    dir: &Path,
+    files: &[PathBuf],
+) -> Result<(), OneOf<(IoError, PatchFailed, SgFailed)>> {
+    for file in files {
+        match file.extension().and_then(|ext| ext.to_str()) {
+            Some("patch") => {
+                let status = Command::new("patch")
+                    .args(["-s", "-p1"])
+                    .arg("-i")
+                    .arg(file)
+                    .arg("-d")
+                    .arg(dir)
+                    .status()
+                    .map_err(|e| OneOf::new(IoError(e)))?;
 
-        if !status.success() {
-            return Err(OneOf::new(PatchFailed(patch.clone())));
-        }
-    }
-    Ok(())
-}
+                if !status.success() {
+                    return Err(OneOf::new(PatchFailed(file.clone())));
+                }
+            }
+            Some("yaml" | "yml") => {
+                let status = Command::new("sg")
+                    .args(["scan", "-r"])
+                    .arg(file)
+                    .arg("--update-all")
+                    .arg(dir)
+                    .status()
+                    .map_err(|e| OneOf::new(IoError(e)))?;
 
-fn apply_sg_rules(dir: &Path, rules: &[PathBuf]) -> Result<(), OneOf<(IoError, SgFailed)>> {
-    for rule in rules {
-        let status = Command::new("sg")
-            .args(["scan", "-r"])
-            .arg(rule)
-            .arg("--update-all")
-            .arg(dir)
-            .status()
-            .map_err(|e| OneOf::new(IoError(e)))?;
-
-        if !status.success() {
-            return Err(OneOf::new(SgFailed(rule.clone())));
+                if !status.success() {
+                    return Err(OneOf::new(SgFailed(file.clone())));
+                }
+            }
+            _ => {}
         }
     }
     Ok(())
