@@ -41,4 +41,4 @@ If no `stitches/<crate-name>/` directory exists for a crate, it compiles normall
 
 ## License
 
-MIT
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.
