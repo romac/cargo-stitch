@@ -59,6 +59,7 @@ pub struct StitchSet {
 }
 
 impl StitchSet {
+    #[must_use = "the discovered StitchSet should be used or explicitly ignored"]
     pub fn discover(
         stitches_dir: &Path,
         pkg_name: &str,
