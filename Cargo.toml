@@ -3,6 +3,10 @@ name = "cargo-stitch"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
+description = "A Cargo subcommand that applies source-level patches and ast-grep rules to workspace crates before compilation"
+repository = "https://github.com/romac/cargo-stitch"
+keywords = ["cargo", "patch", "ast-grep", "build"]
+categories = ["development-tools::cargo-plugins"]
 
 [dependencies]
 cargo_metadata = "0.23"
