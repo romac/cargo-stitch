@@ -10,6 +10,12 @@ use crate::error::{AstGrepFailed, IoError, MissingEnvVar, PatchFailed};
 use crate::fs::{copy_dir_recursive, find_workspace_root};
 use crate::stitch::StitchSet;
 
+/// Execute rustc with the given arguments, replacing the current process.
+/// This function never returns on success; on failure it returns the IO error.
+fn exec_rustc(rustc: &str, args: &[String]) -> std::io::Error {
+    Command::new(rustc).args(args).exec()
+}
+
 pub fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, AstGrepFailed, MissingEnvVar)>> {
     let args: Vec<String> = env::args().collect();
     let rustc = &args[1];
@@ -19,8 +25,7 @@ pub fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, AstGrepFailed, M
         Ok(name) => name,
         Err(_) => {
             // No package context (e.g. rustc version probe) — just exec rustc
-            let err = Command::new(rustc).args(rustc_args).exec();
-            return Err(OneOf::new(IoError(err)));
+            return Err(OneOf::new(IoError(exec_rustc(rustc, rustc_args))));
         }
     };
 
@@ -33,8 +38,7 @@ pub fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, AstGrepFailed, M
         Some(root) => root,
         None => {
             // Could not determine workspace root — just exec rustc
-            let err = Command::new(rustc).args(rustc_args).exec();
-            return Err(OneOf::new(IoError(err)));
+            return Err(OneOf::new(IoError(exec_rustc(rustc, rustc_args))));
         }
     };
     let stitches_dir = workspace_root.join("stitches");
@@ -42,8 +46,7 @@ pub fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, AstGrepFailed, M
     let stitch_set = match StitchSet::discover(&stitches_dir, &pkg_name).map_err(OneOf::broaden)? {
         Some(s) => s,
         None => {
-            let err = Command::new(rustc).args(rustc_args).exec();
-            return Err(OneOf::new(IoError(err)));
+            return Err(OneOf::new(IoError(exec_rustc(rustc, rustc_args))));
         }
     };
 
@@ -69,6 +72,5 @@ pub fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, AstGrepFailed, M
         .map(|arg| arg.replace(manifest_dir_str.as_ref(), patched_dir_str.as_ref()))
         .collect();
 
-    let err = Command::new(rustc).args(&rewritten_args).exec();
-    Err(OneOf::new(IoError(err)))
+    Err(OneOf::new(IoError(exec_rustc(rustc, &rewritten_args))))
 }
