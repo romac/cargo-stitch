@@ -15,7 +15,7 @@ fn main() {
     }
 }
 
-fn run() -> Result<(), OneOf<(IoError, PatchFailed, CargoFailed)>> {
+fn run() -> Result<(), OneOf<(IoError, PatchFailed, SgFailed, CargoFailed)>> {
     if env::var_os(WRAPPER_ENV).is_some() {
         run_wrapper().map_err(OneOf::broaden)
     } else {
@@ -36,6 +36,14 @@ struct PatchFailed(PathBuf);
 impl std::fmt::Display for PatchFailed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "failed to apply patch: {}", self.0.display())
+    }
+}
+
+struct SgFailed(PathBuf);
+
+impl std::fmt::Display for SgFailed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "failed to apply ast-grep rule: {}", self.0.display())
     }
 }
 
@@ -74,7 +82,7 @@ fn run_subcommand() -> Result<(), OneOf<(IoError, CargoFailed)>> {
     }
 }
 
-fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed)>> {
+fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, SgFailed)>> {
     let args: Vec<String> = env::args().collect();
     let rustc = &args[1];
     let rustc_args = &args[2..];
@@ -99,22 +107,27 @@ fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed)>> {
         return Err(OneOf::new(IoError(err)));
     }
 
-    // Collect and sort patch files
-    let mut patches: Vec<PathBuf> = fs::read_dir(&stitches_dir)
-        .map_err(|e| OneOf::new(IoError(e)))?
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let path = entry.path();
-            if path.extension().is_some_and(|ext| ext == "patch") {
-                Some(path)
-            } else {
-                None
-            }
-        })
-        .collect();
-    patches.sort();
+    // Collect and sort patch files and ast-grep rule files
+    let mut patches: Vec<PathBuf> = Vec::new();
+    let mut sg_rules: Vec<PathBuf> = Vec::new();
 
-    if patches.is_empty() {
+    for entry in fs::read_dir(&stitches_dir).map_err(|e| OneOf::new(IoError(e)))? {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let path = entry.path();
+        match path.extension().and_then(|ext| ext.to_str()) {
+            Some("patch") => patches.push(path),
+            Some("yaml" | "yml") => sg_rules.push(path),
+            _ => {}
+        }
+    }
+
+    patches.sort();
+    sg_rules.sort();
+
+    if patches.is_empty() && sg_rules.is_empty() {
         let err = Command::new(rustc).args(rustc_args).exec();
         return Err(OneOf::new(IoError(err)));
     }
@@ -130,8 +143,9 @@ fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed)>> {
     }
     copy_dir_recursive(&manifest_dir, &patched_dir).map_err(|e| OneOf::new(IoError(e)))?;
 
-    // Apply patches
-    apply_patches(&patched_dir, &patches)?;
+    // Apply patches first, then ast-grep rules
+    apply_patches(&patched_dir, &patches).map_err(OneOf::broaden)?;
+    apply_sg_rules(&patched_dir, &sg_rules).map_err(OneOf::broaden)?;
 
     // Rewrite rustc args: replace manifest_dir with patched_dir
     let manifest_dir_str = manifest_dir.to_string_lossy();
@@ -187,6 +201,23 @@ fn apply_patches(dir: &Path, patches: &[PathBuf]) -> Result<(), OneOf<(IoError, 
 
         if !status.success() {
             return Err(OneOf::new(PatchFailed(patch.clone())));
+        }
+    }
+    Ok(())
+}
+
+fn apply_sg_rules(dir: &Path, rules: &[PathBuf]) -> Result<(), OneOf<(IoError, SgFailed)>> {
+    for rule in rules {
+        let status = Command::new("sg")
+            .args(["scan", "-r"])
+            .arg(rule)
+            .arg("--update-all")
+            .arg(dir)
+            .status()
+            .map_err(|e| OneOf::new(IoError(e)))?;
+
+        if !status.success() {
+            return Err(OneOf::new(SgFailed(rule.clone())));
         }
     }
     Ok(())

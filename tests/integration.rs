@@ -23,12 +23,13 @@ fn cargo_stitch_bin() -> &'static Path {
         let stdout = String::from_utf8(output.stdout).unwrap();
         for line in stdout.lines().rev() {
             // Look for: "executable":"/path/to/cargo-stitch"
-            if line.contains("\"executable\"") && line.contains("cargo-stitch") {
-                if let Some(start) = line.find("\"executable\":\"") {
-                    let rest = &line[start + "\"executable\":\"".len()..];
-                    if let Some(end) = rest.find('"') {
-                        return PathBuf::from(&rest[..end]);
-                    }
+            if line.contains("\"executable\"")
+                && line.contains("cargo-stitch")
+                && let Some(start) = line.find("\"executable\":\"")
+            {
+                let rest = &line[start + "\"executable\":\"".len()..];
+                if let Some(end) = rest.find('"') {
+                    return PathBuf::from(&rest[..end]);
                 }
             }
         }
@@ -93,14 +94,21 @@ crate-a = { path = "../crate-a" }
     .unwrap();
 }
 
-fn create_patch(root: &Path) {
-    let patch_dir = root.join("stitches/crate-a");
-    fs::create_dir_all(&patch_dir).unwrap();
+mod patch {
+    use super::*;
 
-    // Patch that changes "hello" to "patched"
-    fs::write(
-        patch_dir.join("001-fix.patch"),
-        r#"--- a/src/lib.rs
+    #[test]
+    fn build_with_patch() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+
+        create_workspace(root);
+
+        let patch_dir = root.join("stitches/crate-a");
+        fs::create_dir_all(&patch_dir).unwrap();
+        fs::write(
+            patch_dir.join("001-fix.patch"),
+            r#"--- a/src/lib.rs
 +++ b/src/lib.rs
 @@ -1,3 +1,3 @@
  pub fn greeting() -> &'static str {
@@ -108,83 +116,77 @@ fn create_patch(root: &Path) {
 +    "patched"
  }
 "#,
-    )
-    .unwrap();
-}
-
-#[test]
-fn build_with_patch() {
-    let tmp = tempfile::tempdir().unwrap();
-    let root = tmp.path();
-
-    create_workspace(root);
-    create_patch(root);
-
-    let output = Command::new(cargo_stitch_bin())
-        .args(["stitch", "build"])
-        .current_dir(root)
-        .output()
+        )
         .unwrap();
 
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success(), "cargo stitch build failed:\n{stderr}");
+        let output = Command::new(cargo_stitch_bin())
+            .args(["stitch", "build"])
+            .current_dir(root)
+            .output()
+            .unwrap();
 
-    // Verify patched source was created
-    let patched_lib = root.join("target/patched-crates/crate-a/src/lib.rs");
-    assert!(patched_lib.exists(), "patched source should exist");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "cargo stitch build failed:\n{stderr}"
+        );
 
-    let content = fs::read_to_string(&patched_lib).unwrap();
-    assert!(
-        content.contains("\"patched\""),
-        "patched source should contain the patched string, got:\n{content}"
-    );
-    assert!(
-        !content.contains("\"hello\""),
-        "patched source should not contain the original string"
-    );
-}
+        // Verify patched source was created
+        let patched_lib = root.join("target/patched-crates/crate-a/src/lib.rs");
+        assert!(patched_lib.exists(), "patched source should exist");
 
-#[test]
-fn build_without_patches() {
-    let tmp = tempfile::tempdir().unwrap();
-    let root = tmp.path();
+        let content = fs::read_to_string(&patched_lib).unwrap();
+        assert!(
+            content.contains("\"patched\""),
+            "patched source should contain the patched string, got:\n{content}"
+        );
+        assert!(
+            !content.contains("\"hello\""),
+            "patched source should not contain the original string"
+        );
+    }
 
-    create_workspace(root);
-    // No patches created
+    #[test]
+    fn build_without_patches() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
 
-    let output = Command::new(cargo_stitch_bin())
-        .args(["stitch", "build"])
-        .current_dir(root)
-        .output()
-        .unwrap();
+        create_workspace(root);
+        // No patches created
 
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        output.status.success(),
-        "cargo stitch build failed without patches:\n{stderr}"
-    );
+        let output = Command::new(cargo_stitch_bin())
+            .args(["stitch", "build"])
+            .current_dir(root)
+            .output()
+            .unwrap();
 
-    // No patched-crates directory should exist
-    assert!(
-        !root.join("target/patched-crates").exists(),
-        "patched-crates dir should not exist when there are no patches"
-    );
-}
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "cargo stitch build failed without patches:\n{stderr}"
+        );
 
-#[test]
-fn multiple_patches_applied_in_order() {
-    let tmp = tempfile::tempdir().unwrap();
-    let root = tmp.path();
+        // No patched-crates directory should exist
+        assert!(
+            !root.join("target/patched-crates").exists(),
+            "patched-crates dir should not exist when there are no patches"
+        );
+    }
 
-    create_workspace(root);
+    #[test]
+    fn multiple_patches_applied_in_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
 
-    let patch_dir = root.join("stitches/crate-a");
-    fs::create_dir_all(&patch_dir).unwrap();
+        create_workspace(root);
 
-    // First patch: change "hello" to "step1"
-    fs::write(
-        patch_dir.join("001-first.patch"),
-        r#"--- a/src/lib.rs
+        let patch_dir = root.join("stitches/crate-a");
+        fs::create_dir_all(&patch_dir).unwrap();
+
+        // First patch: change "hello" to "step1"
+        fs::write(
+            patch_dir.join("001-first.patch"),
+            r#"--- a/src/lib.rs
 +++ b/src/lib.rs
 @@ -1,3 +1,3 @@
  pub fn greeting() -> &'static str {
@@ -192,13 +194,13 @@ fn multiple_patches_applied_in_order() {
 +    "step1"
  }
 "#,
-    )
-    .unwrap();
+        )
+        .unwrap();
 
-    // Second patch: change "step1" to "step2"
-    fs::write(
-        patch_dir.join("002-second.patch"),
-        r#"--- a/src/lib.rs
+        // Second patch: change "step1" to "step2"
+        fs::write(
+            patch_dir.join("002-second.patch"),
+            r#"--- a/src/lib.rs
 +++ b/src/lib.rs
 @@ -1,3 +1,3 @@
  pub fn greeting() -> &'static str {
@@ -206,21 +208,135 @@ fn multiple_patches_applied_in_order() {
 +    "step2"
  }
 "#,
-    )
-    .unwrap();
-
-    let output = Command::new(cargo_stitch_bin())
-        .args(["stitch", "build"])
-        .current_dir(root)
-        .output()
+        )
         .unwrap();
 
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success(), "build failed:\n{stderr}");
+        let output = Command::new(cargo_stitch_bin())
+            .args(["stitch", "build"])
+            .current_dir(root)
+            .output()
+            .unwrap();
 
-    let content = fs::read_to_string(root.join("target/patched-crates/crate-a/src/lib.rs")).unwrap();
-    assert!(
-        content.contains("\"step2\""),
-        "patches should be applied in order, got:\n{content}"
-    );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "build failed:\n{stderr}");
+
+        let content =
+            fs::read_to_string(root.join("target/patched-crates/crate-a/src/lib.rs")).unwrap();
+        assert!(
+            content.contains("\"step2\""),
+            "patches should be applied in order, got:\n{content}"
+        );
+    }
+}
+
+mod sg_rule {
+    use super::*;
+
+    #[test]
+    fn build_with_sg_rule() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+
+        create_workspace(root);
+
+        let rule_dir = root.join("stitches/crate-a");
+        fs::create_dir_all(&rule_dir).unwrap();
+        fs::write(
+            rule_dir.join("001-rename.yaml"),
+            r#"id: rename-greeting
+language: Rust
+rule:
+  pattern: '"hello"'
+fix: '"rewritten"'
+"#,
+        )
+        .unwrap();
+
+        let output = Command::new(cargo_stitch_bin())
+            .args(["stitch", "build"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "cargo stitch build failed:\n{stderr}"
+        );
+
+        // Verify ast-grep rule was applied
+        let patched_lib = root.join("target/patched-crates/crate-a/src/lib.rs");
+        assert!(patched_lib.exists(), "patched source should exist");
+
+        let content = fs::read_to_string(&patched_lib).unwrap();
+        assert!(
+            content.contains("\"rewritten\""),
+            "ast-grep rule should have rewritten the string, got:\n{content}"
+        );
+        assert!(
+            !content.contains("\"hello\""),
+            "original string should not remain after ast-grep rule"
+        );
+    }
+
+    #[test]
+    fn build_with_patch_and_sg_rule() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+
+        create_workspace(root);
+
+        let stitch_dir = root.join("stitches/crate-a");
+        fs::create_dir_all(&stitch_dir).unwrap();
+
+        // Patch changes "hello" to "patched"
+        fs::write(
+            stitch_dir.join("001-fix.patch"),
+            r#"--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,3 @@
+ pub fn greeting() -> &'static str {
+-    "hello"
++    "patched"
+ }
+"#,
+        )
+        .unwrap();
+
+        // ast-grep rule changes "patched" to "both"
+        // This verifies patches run first, then ast-grep rules
+        fs::write(
+            stitch_dir.join("002-rename.yaml"),
+            r#"id: rename-patched
+language: Rust
+rule:
+  pattern: '"patched"'
+fix: '"both"'
+"#,
+        )
+        .unwrap();
+
+        let output = Command::new(cargo_stitch_bin())
+            .args(["stitch", "build"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "cargo stitch build failed:\n{stderr}"
+        );
+
+        let patched_lib = root.join("target/patched-crates/crate-a/src/lib.rs");
+        let content = fs::read_to_string(&patched_lib).unwrap();
+        assert!(
+            content.contains("\"both\""),
+            "patch should apply first, then ast-grep rule should rewrite, got:\n{content}"
+        );
+        assert!(
+            !content.contains("\"hello\"") && !content.contains("\"patched\""),
+            "neither original nor intermediate string should remain, got:\n{content}"
+        );
+    }
 }
