@@ -39,3 +39,15 @@ impl std::fmt::Display for MissingEnvVar {
         write!(f, "missing environment variable: {}", self.0)
     }
 }
+
+pub struct MissingTool(pub &'static str);
+
+impl std::fmt::Display for MissingTool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "required tool not found: {} (is it installed and in PATH?)",
+            self.0
+        )
+    }
+}
