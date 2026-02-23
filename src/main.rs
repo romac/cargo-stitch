@@ -6,6 +6,8 @@ use std::process::Command;
 
 use terrors::OneOf;
 
+const WRAPPER_ENV: &str = "__CARGO_STITCH_WRAP";
+
 fn main() {
     if let Err(e) = run() {
         eprintln!("cargo-stitch: {e}");
@@ -14,7 +16,7 @@ fn main() {
 }
 
 fn run() -> Result<(), OneOf<(IoError, PatchFailed, CargoFailed)>> {
-    if env::var("CARGO_PKG_NAME").is_ok() {
+    if env::var_os(WRAPPER_ENV).is_some() {
         run_wrapper().map_err(OneOf::broaden)
     } else {
         run_subcommand().map_err(OneOf::broaden)
@@ -61,6 +63,7 @@ fn run_subcommand() -> Result<(), OneOf<(IoError, CargoFailed)>> {
     let status = Command::new("cargo")
         .args(cargo_args)
         .env("RUSTC_WORKSPACE_WRAPPER", &self_exe)
+        .env(WRAPPER_ENV, "1")
         .status()
         .map_err(|e| OneOf::new(IoError(e)))?;
 
@@ -76,7 +79,15 @@ fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed)>> {
     let rustc = &args[1];
     let rustc_args = &args[2..];
 
-    let pkg_name = env::var("CARGO_PKG_NAME").unwrap();
+    let pkg_name = match env::var("CARGO_PKG_NAME") {
+        Ok(name) => name,
+        Err(_) => {
+            // No package context (e.g. rustc version probe) — just exec rustc
+            let err = Command::new(rustc).args(rustc_args).exec();
+            return Err(OneOf::new(IoError(err)));
+        }
+    };
+
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let manifest_dir = PathBuf::from(&manifest_dir);
 
@@ -84,7 +95,6 @@ fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed)>> {
     let stitches_dir = workspace_root.join("stitches").join(&pkg_name);
 
     if !stitches_dir.is_dir() {
-        // No patches — exec rustc unchanged
         let err = Command::new(rustc).args(rustc_args).exec();
         return Err(OneOf::new(IoError(err)));
     }
