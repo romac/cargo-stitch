@@ -110,6 +110,7 @@ jobs:
       - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           for f in artifacts/**/*.tar.gz; do
             gh release upload "${{ steps.tag.outputs.tag }}" "$f" --clobber
