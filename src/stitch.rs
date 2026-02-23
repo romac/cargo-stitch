@@ -4,7 +4,7 @@ use std::process::Command;
 
 use terrors::OneOf;
 
-use crate::error::{IoError, PatchFailed, AstGrepFailed};
+use crate::error::{AstGrepFailed, IoError, PatchFailed};
 
 pub enum Stitch {
     Patch(PathBuf),
@@ -59,7 +59,10 @@ pub struct StitchSet {
 }
 
 impl StitchSet {
-    pub fn discover(stitches_dir: &Path, pkg_name: &str) -> Result<Option<Self>, OneOf<(IoError,)>> {
+    pub fn discover(
+        stitches_dir: &Path,
+        pkg_name: &str,
+    ) -> Result<Option<Self>, OneOf<(IoError,)>> {
         let pkg_dir = stitches_dir.join(pkg_name);
 
         if !pkg_dir.is_dir() {
@@ -69,10 +72,7 @@ impl StitchSet {
         let mut paths: Vec<PathBuf> = Vec::new();
 
         for entry in fs::read_dir(&pkg_dir).map_err(|e| OneOf::new(IoError(e)))? {
-            let entry = match entry {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
+            let entry = entry.map_err(|e| OneOf::new(IoError(e)))?;
             paths.push(entry.path());
         }
 

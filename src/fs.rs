@@ -1,18 +1,16 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub fn find_workspace_root(manifest_dir: &Path) -> PathBuf {
-    let mut root = manifest_dir.to_path_buf();
-    let mut current = manifest_dir.to_path_buf();
-    while let Some(parent) = current.parent() {
-        if parent.join("Cargo.toml").exists() {
-            root = parent.to_path_buf();
-        } else {
-            break;
-        }
-        current = parent.to_path_buf();
-    }
-    root
+use cargo_metadata::MetadataCommand;
+
+pub fn find_workspace_root(manifest_dir: &Path) -> Option<PathBuf> {
+    let metadata = MetadataCommand::new()
+        .current_dir(manifest_dir)
+        .no_deps()
+        .exec()
+        .ok()?;
+
+    Some(metadata.workspace_root.into_std_path_buf())
 }
 
 pub fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {

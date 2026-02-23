@@ -6,11 +6,11 @@ use std::process::Command;
 
 use terrors::OneOf;
 
-use crate::error::{IoError, PatchFailed, AstGrepFailed};
+use crate::error::{AstGrepFailed, IoError, MissingEnvVar, PatchFailed};
 use crate::fs::{copy_dir_recursive, find_workspace_root};
 use crate::stitch::StitchSet;
 
-pub fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, AstGrepFailed)>> {
+pub fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, AstGrepFailed, MissingEnvVar)>> {
     let args: Vec<String> = env::args().collect();
     let rustc = &args[1];
     let rustc_args = &args[2..];
@@ -24,15 +24,22 @@ pub fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, AstGrepFailed)>>
         }
     };
 
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-    let manifest_dir = PathBuf::from(&manifest_dir);
+    let manifest_dir = match env::var("CARGO_MANIFEST_DIR") {
+        Ok(dir) => PathBuf::from(dir),
+        Err(_) => return Err(OneOf::new(MissingEnvVar("CARGO_MANIFEST_DIR"))),
+    };
 
-    let workspace_root = find_workspace_root(&manifest_dir);
+    let workspace_root = match find_workspace_root(&manifest_dir) {
+        Some(root) => root,
+        None => {
+            // Could not determine workspace root — just exec rustc
+            let err = Command::new(rustc).args(rustc_args).exec();
+            return Err(OneOf::new(IoError(err)));
+        }
+    };
     let stitches_dir = workspace_root.join("stitches");
 
-    let stitch_set = match StitchSet::discover(&stitches_dir, &pkg_name)
-        .map_err(OneOf::broaden)?
-    {
+    let stitch_set = match StitchSet::discover(&stitches_dir, &pkg_name).map_err(OneOf::broaden)? {
         Some(s) => s,
         None => {
             let err = Command::new(rustc).args(rustc_args).exec();
@@ -52,7 +59,7 @@ pub fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, AstGrepFailed)>>
     copy_dir_recursive(&manifest_dir, &patched_dir).map_err(|e| OneOf::new(IoError(e)))?;
 
     // Apply stitch files in filename order
-    stitch_set.apply(&patched_dir)?;
+    stitch_set.apply(&patched_dir).map_err(OneOf::broaden)?;
 
     // Rewrite rustc args: replace manifest_dir with patched_dir
     let manifest_dir_str = manifest_dir.to_string_lossy();

@@ -31,3 +31,11 @@ impl std::fmt::Display for CargoFailed {
         write!(f, "cargo exited with status {}", self.0)
     }
 }
+
+pub struct MissingEnvVar(pub &'static str);
+
+impl std::fmt::Display for MissingEnvVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "missing environment variable: {}", self.0)
+    }
+}

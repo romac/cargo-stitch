@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+cargo_metadata = "0.19"
 terrors = "0.3"
 
 [dev-dependencies]
