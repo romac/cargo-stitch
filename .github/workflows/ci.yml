@@ -123,14 +123,8 @@ jobs:
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
 
-      - name: Install ast-grep (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          curl -fsSL https://ast-grep.github.io/install.sh | bash -s -- --to /usr/local/bin
-
-      - name: Install ast-grep (macOS)
-        if: runner.os == 'macOS'
-        run: brew install ast-grep
+      - name: Install ast-grep
+        run: npm install -g @ast-grep/cli
 
       - name: Build
         run: cargo build --all-targets
