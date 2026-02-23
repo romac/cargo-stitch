@@ -18,7 +18,14 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
+        let file_name = entry.file_name();
+
+        // Skip target and .git directories to avoid infinite recursion and unnecessary copying
+        if file_name == "target" || file_name == ".git" {
+            continue;
+        }
+
+        let dst_path = dst.join(&file_name);
         if src_path.is_dir() {
             copy_dir_recursive(&src_path, &dst_path)?;
         } else {
