@@ -123,6 +123,8 @@ jobs:
     runs-on: ubuntu-latest
     # Only publish on actual releases, not manual dispatch
     if: github.event_name == 'release'
+    permissions:
+      id-token: write
 
     steps:
       - uses: actions/checkout@v5
@@ -130,10 +132,13 @@ jobs:
       - name: Setup Rust toolchain
         run: rustup update stable && rustup default stable
 
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
       - name: Package for crates.io
         run: cargo package --locked
 
       - name: Publish to crates.io
         run: cargo publish --locked || [[ $? -eq 101 ]]
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
