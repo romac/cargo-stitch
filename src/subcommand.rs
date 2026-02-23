@@ -3,8 +3,8 @@ use std::process::Command;
 
 use terrors::OneOf;
 
-use crate::error::{CargoFailed, IoError};
 use crate::WRAPPER_ENV;
+use crate::error::{CargoFailed, IoError};
 
 pub fn run_subcommand() -> Result<(), OneOf<(IoError, CargoFailed)>> {
     let args: Vec<String> = env::args().collect();

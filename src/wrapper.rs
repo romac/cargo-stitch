@@ -6,27 +6,33 @@ use std::process::Command;
 
 use terrors::OneOf;
 
-use crate::error::{AstGrepFailed, IoError, MissingEnvVar, PatchFailed};
+use crate::error::{AstGrepFailed, IoError, MissingEnvVar, MissingWorkspaceRoot, PatchFailed};
 use crate::fs::{copy_dir_recursive, find_workspace_root};
 use crate::stitch::StitchSet;
 
 /// Execute rustc with the given arguments, replacing the current process.
-/// This function never returns on success; on failure it returns the IO error.
-fn exec_rustc(rustc: &str, args: &[String]) -> std::io::Error {
-    Command::new(rustc).args(args).exec()
+/// This function only returns if exec fails; on success it never returns.
+fn exec_rustc(rustc: &str, args: &[String]) -> IoError {
+    IoError(Command::new(rustc).args(args).exec())
 }
 
-pub fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, AstGrepFailed, MissingEnvVar)>> {
+pub fn run_wrapper() -> Result<
+    (),
+    OneOf<(
+        IoError,
+        PatchFailed,
+        AstGrepFailed,
+        MissingEnvVar,
+        MissingWorkspaceRoot,
+    )>,
+> {
     let args: Vec<String> = env::args().collect();
     let rustc = &args[1];
     let rustc_args = &args[2..];
 
-    let pkg_name = match env::var("CARGO_PKG_NAME") {
-        Ok(name) => name,
-        Err(_) => {
-            // No package context (e.g. rustc version probe) — just exec rustc
-            return Err(OneOf::new(IoError(exec_rustc(rustc, rustc_args))));
-        }
+    // No package context (e.g. rustc version probe) — just exec rustc
+    let Ok(pkg_name) = env::var("CARGO_PKG_NAME") else {
+        return Err(OneOf::new(exec_rustc(rustc, rustc_args)));
     };
 
     let manifest_dir = match env::var("CARGO_MANIFEST_DIR") {
@@ -34,20 +40,15 @@ pub fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, AstGrepFailed, M
         Err(_) => return Err(OneOf::new(MissingEnvVar("CARGO_MANIFEST_DIR"))),
     };
 
-    let workspace_root = match find_workspace_root(&manifest_dir) {
-        Some(root) => root,
-        None => {
-            // Could not determine workspace root — just exec rustc
-            return Err(OneOf::new(IoError(exec_rustc(rustc, rustc_args))));
-        }
+    let Some(workspace_root) = find_workspace_root(&manifest_dir) else {
+        return Err(OneOf::new(MissingWorkspaceRoot(manifest_dir)));
     };
     let stitches_dir = workspace_root.join("stitches");
 
-    let stitch_set = match StitchSet::discover(&stitches_dir, &pkg_name).map_err(OneOf::broaden)? {
-        Some(s) => s,
-        None => {
-            return Err(OneOf::new(IoError(exec_rustc(rustc, rustc_args))));
-        }
+    // No stitches for this package — just exec rustc
+    let Some(stitch_set) = StitchSet::discover(&stitches_dir, &pkg_name).map_err(OneOf::broaden)?
+    else {
+        return Err(OneOf::new(exec_rustc(rustc, rustc_args)));
     };
 
     // Copy source to target/patched-crates/<pkg_name>/
@@ -72,5 +73,5 @@ pub fn run_wrapper() -> Result<(), OneOf<(IoError, PatchFailed, AstGrepFailed, M
         .map(|arg| arg.replace(manifest_dir_str.as_ref(), patched_dir_str.as_ref()))
         .collect();
 
-    Err(OneOf::new(IoError(exec_rustc(rustc, &rewritten_args))))
+    Err(OneOf::new(exec_rustc(rustc, &rewritten_args)))
 }

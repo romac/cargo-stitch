@@ -51,3 +51,15 @@ impl std::fmt::Display for MissingTool {
         )
     }
 }
+
+pub struct MissingWorkspaceRoot(pub PathBuf);
+
+impl std::fmt::Display for MissingWorkspaceRoot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "could not find workspace root from manifest directory: {}",
+            self.0.display()
+        )
+    }
+}

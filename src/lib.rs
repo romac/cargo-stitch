@@ -12,7 +12,10 @@ mod stitch;
 mod subcommand;
 mod wrapper;
 
-pub use error::{AstGrepFailed, CargoFailed, IoError, MissingEnvVar, MissingTool, PatchFailed};
+pub use error::{
+    AstGrepFailed, CargoFailed, IoError, MissingEnvVar, MissingTool, MissingWorkspaceRoot,
+    PatchFailed,
+};
 
 pub const WRAPPER_ENV: &str = "__CARGO_STITCH_WRAP";
 
@@ -23,6 +26,7 @@ pub type Error = OneOf<(
     CargoFailed,
     MissingEnvVar,
     MissingTool,
+    MissingWorkspaceRoot,
 )>;
 
 fn check_required_tools() -> Result<(), OneOf<(MissingTool,)>> {
