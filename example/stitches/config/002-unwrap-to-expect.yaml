@@ -1,0 +1,5 @@
+id: unwrap-to-expect
+language: Rust
+rule:
+  pattern: $EXPR.unwrap()
+fix: $EXPR.expect("value expected")
