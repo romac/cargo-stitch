@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
+use cargo_metadata::MetadataCommand;
+
 fn cargo_stitch_bin() -> &'static Path {
     static BIN: OnceLock<PathBuf> = OnceLock::new();
     BIN.get_or_init(|| {
@@ -14,26 +16,22 @@ fn cargo_stitch_bin() -> &'static Path {
         if path.exists() {
             return path;
         }
-        // Fallback: build and extract executable path from cargo's JSON output
-        let output = Command::new("cargo")
-            .args(["build", "--bin", "cargo-stitch", "--message-format=json"])
-            .output()
-            .unwrap();
-        assert!(output.status.success(), "failed to build cargo-stitch");
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        for line in stdout.lines().rev() {
-            // Look for: "executable":"/path/to/cargo-stitch"
-            if line.contains("\"executable\"")
-                && line.contains("cargo-stitch")
-                && let Some(start) = line.find("\"executable\":\"")
-            {
-                let rest = &line[start + "\"executable\":\"".len()..];
-                if let Some(end) = rest.find('"') {
-                    return PathBuf::from(&rest[..end]);
-                }
-            }
-        }
-        panic!("could not find cargo-stitch binary");
+
+        // Fallback: use cargo_metadata to find the target directory, then build
+        let metadata = MetadataCommand::new()
+            .no_deps()
+            .exec()
+            .expect("failed to get cargo metadata");
+
+        let status = Command::new("cargo")
+            .args(["build", "--bin", "cargo-stitch"])
+            .status()
+            .expect("failed to run cargo build");
+        assert!(status.success(), "failed to build cargo-stitch");
+
+        let bin_path = metadata.target_directory.join("debug").join("cargo-stitch");
+
+        bin_path.into_std_path_buf()
     })
 }
 
