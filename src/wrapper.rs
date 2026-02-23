@@ -16,16 +16,15 @@ fn exec_rustc(rustc: &str, args: &[String]) -> IoError {
     IoError(Command::new(rustc).args(args).exec())
 }
 
-pub fn run_wrapper() -> Result<
-    (),
-    OneOf<(
-        IoError,
-        PatchFailed,
-        AstGrepFailed,
-        MissingEnvVar,
-        MissingWorkspaceRoot,
-    )>,
-> {
+type WrapperError = OneOf<(
+    IoError,
+    PatchFailed,
+    AstGrepFailed,
+    MissingEnvVar,
+    MissingWorkspaceRoot,
+)>;
+
+pub fn run_wrapper() -> Result<(), WrapperError> {
     let args: Vec<String> = env::args().collect();
     let rustc = &args[1];
     let rustc_args = &args[2..];
