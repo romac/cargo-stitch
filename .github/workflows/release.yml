@@ -108,11 +108,12 @@ jobs:
           fi
 
       - name: Upload to release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          files: artifacts/**/*
-          fail_on_unmatched_files: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for f in artifacts/**/*.tar.gz; do
+            gh release upload "${{ steps.tag.outputs.tag }}" "$f" --clobber
+          done
 
   # Publish to crates.io
   publish:
