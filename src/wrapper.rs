@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::os::unix::process::CommandExt;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -54,14 +55,12 @@ pub fn run_wrapper() -> Result<(), WrapperError> {
     };
 
     // Copy source to target/patched-crates/<pkg_name>/
-    let patched_dir = workspace_root
-        .join("target")
-        .join("patched-crates")
-        .join(&pkg_name);
+    let patched_dir = patched_dir(&pkg_name, &workspace_root);
 
     if patched_dir.exists() {
         fs::remove_dir_all(&patched_dir).map_err(|e| OneOf::new(IoError(e)))?;
     }
+
     copy_dir_recursive(&manifest_dir, &patched_dir).map_err(|e| OneOf::new(IoError(e)))?;
 
     // Apply stitch files in filename order
@@ -105,4 +104,11 @@ pub fn run_wrapper() -> Result<(), WrapperError> {
         .collect();
 
     Err(OneOf::new(exec_rustc(rustc, &rewritten_args)))
+}
+
+fn patched_dir(pkg_name: &str, workspace_root: &Path) -> PathBuf {
+    workspace_root
+        .join("target")
+        .join("patched-crates")
+        .join(pkg_name)
 }
