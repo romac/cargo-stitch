@@ -19,6 +19,7 @@ pub use error::{
 
 pub const WRAPPER_ENV: &str = "__CARGO_STITCH_WRAP";
 pub const WORKSPACE_ROOT_ENV: &str = "__CARGO_STITCH_WORKSPACE_ROOT";
+pub const STITCH_MANIFEST_ENV: &str = "__CARGO_STITCH_MANIFEST";
 
 pub type Error = OneOf<(
     IoError,

@@ -1,11 +1,14 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use serde::{Deserialize, Serialize};
 use terrors::OneOf;
 
 use crate::error::{AstGrepFailed, IoError, PatchFailed};
 
+#[derive(Serialize, Deserialize)]
 pub enum Stitch {
     Patch(PathBuf),
     SgRule(PathBuf),
@@ -54,38 +57,55 @@ impl Stitch {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct StitchSet {
     stitches: Vec<Stitch>,
 }
 
 impl StitchSet {
-    #[must_use = "the discovered StitchSet should be used or explicitly ignored"]
-    pub fn discover(
+    /// Scan all `stitches/*/` subdirectories at once and return a map of pkg_name to StitchSet.
+    pub fn discover_all(
         stitches_dir: &Path,
-        pkg_name: &str,
-    ) -> Result<Option<Self>, OneOf<(IoError,)>> {
-        let pkg_dir = stitches_dir.join(pkg_name);
+    ) -> Result<HashMap<String, StitchSet>, OneOf<(IoError,)>> {
+        let mut manifest = HashMap::new();
 
-        if !pkg_dir.is_dir() {
-            return Ok(None);
+        if !stitches_dir.is_dir() {
+            return Ok(manifest);
         }
 
-        let mut paths: Vec<PathBuf> = Vec::new();
+        let mut entries: Vec<_> = fs::read_dir(stitches_dir)
+            .map_err(|e| OneOf::new(IoError(e)))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| OneOf::new(IoError(e)))?;
 
-        for entry in fs::read_dir(&pkg_dir).map_err(|e| OneOf::new(IoError(e)))? {
-            let entry = entry.map_err(|e| OneOf::new(IoError(e)))?;
-            paths.push(entry.path());
+        entries.sort_by_key(|e| e.file_name());
+
+        for entry in entries {
+            if !entry
+                .file_type()
+                .map_err(|e| OneOf::new(IoError(e)))?
+                .is_dir()
+            {
+                continue;
+            }
+
+            let pkg_name = entry.file_name().to_string_lossy().into_owned();
+
+            let mut paths: Vec<PathBuf> = Vec::new();
+            for file_entry in fs::read_dir(entry.path()).map_err(|e| OneOf::new(IoError(e)))? {
+                let file_entry = file_entry.map_err(|e| OneOf::new(IoError(e)))?;
+                paths.push(file_entry.path());
+            }
+            paths.sort();
+
+            let stitches: Vec<Stitch> = paths.into_iter().filter_map(Stitch::from_path).collect();
+
+            if !stitches.is_empty() {
+                manifest.insert(pkg_name, StitchSet { stitches });
+            }
         }
 
-        paths.sort();
-
-        let stitches: Vec<Stitch> = paths.into_iter().filter_map(Stitch::from_path).collect();
-
-        if stitches.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(Some(StitchSet { stitches }))
+        Ok(manifest)
     }
 
     pub fn apply(&self, dir: &Path) -> Result<(), OneOf<(IoError, PatchFailed, AstGrepFailed)>> {

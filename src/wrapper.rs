@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::os::unix::process::CommandExt;
@@ -6,10 +7,10 @@ use std::process::Command;
 
 use terrors::OneOf;
 
-use crate::WORKSPACE_ROOT_ENV;
 use crate::error::{AstGrepFailed, IoError, MissingEnvVar, PatchFailed};
 use crate::fs::copy_dir_recursive;
 use crate::stitch::StitchSet;
+use crate::{STITCH_MANIFEST_ENV, WORKSPACE_ROOT_ENV};
 
 /// Execute rustc with the given arguments, replacing the current process.
 /// This function only returns if exec fails; on success it never returns.
@@ -38,11 +39,17 @@ pub fn run_wrapper() -> Result<(), WrapperError> {
         Ok(dir) => PathBuf::from(dir),
         Err(_) => return Err(OneOf::new(MissingEnvVar(WORKSPACE_ROOT_ENV))),
     };
-    let stitches_dir = workspace_root.join("stitches");
+
+    let manifest_json = match env::var(STITCH_MANIFEST_ENV) {
+        Ok(json) => json,
+        Err(_) => return Err(OneOf::new(MissingEnvVar(STITCH_MANIFEST_ENV))),
+    };
+
+    let manifest: HashMap<String, StitchSet> =
+        serde_json::from_str(&manifest_json).map_err(|e| OneOf::new(IoError(e.into())))?;
 
     // No stitches for this package — just exec rustc
-    let Some(stitch_set) = StitchSet::discover(&stitches_dir, &pkg_name).map_err(OneOf::broaden)?
-    else {
+    let Some(stitch_set) = manifest.get(&pkg_name) else {
         return Err(OneOf::new(exec_rustc(rustc, rustc_args)));
     };
 

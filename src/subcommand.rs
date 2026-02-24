@@ -5,7 +5,8 @@ use terrors::OneOf;
 
 use crate::error::{CargoFailed, IoError, MissingWorkspaceRoot};
 use crate::fs::find_workspace_root;
-use crate::{WORKSPACE_ROOT_ENV, WRAPPER_ENV};
+use crate::stitch::StitchSet;
+use crate::{STITCH_MANIFEST_ENV, WORKSPACE_ROOT_ENV, WRAPPER_ENV};
 
 pub fn run_subcommand() -> Result<(), OneOf<(IoError, CargoFailed, MissingWorkspaceRoot)>> {
     let args: Vec<String> = env::args().collect();
@@ -24,11 +25,17 @@ pub fn run_subcommand() -> Result<(), OneOf<(IoError, CargoFailed, MissingWorksp
     let workspace_root =
         find_workspace_root(&cwd).ok_or_else(|| OneOf::new(MissingWorkspaceRoot(cwd.clone())))?;
 
+    let stitches_dir = workspace_root.join("stitches");
+    let manifest = StitchSet::discover_all(&stitches_dir).map_err(OneOf::broaden)?;
+    let manifest_json =
+        serde_json::to_string(&manifest).map_err(|e| OneOf::new(IoError(e.into())))?;
+
     let status = Command::new("cargo")
         .args(cargo_args)
         .env("RUSTC_WORKSPACE_WRAPPER", &self_exe)
         .env(WRAPPER_ENV, "1")
         .env(WORKSPACE_ROOT_ENV, &workspace_root)
+        .env(STITCH_MANIFEST_ENV, &manifest_json)
         .status()
         .map_err(|e| OneOf::new(IoError(e)))?;
 
