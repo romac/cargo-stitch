@@ -121,6 +121,7 @@ jobs:
     name: Publish to crates.io
     needs: [build]
     runs-on: ubuntu-latest
+    environment: Release
     # Only publish on actual releases, not manual dispatch
     if: github.event_name == 'release'
     permissions:
