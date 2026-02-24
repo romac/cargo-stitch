@@ -8,6 +8,16 @@ use terrors::OneOf;
 
 use crate::error::{AstGrepFailed, IoError, PatchFailed};
 
+/// Print a cargo-style status line to stderr.
+///
+/// Format: bold yellow `status` right-aligned to 12 characters, followed by the message.
+fn cargo_status(status: &str, message: &str) {
+    use std::io::Write;
+
+    let mut stderr = std::io::stderr().lock();
+    let _ = writeln!(stderr, "\x1b[1;33m{status:>12}\x1b[0m {message}");
+}
+
 #[derive(Serialize, Deserialize)]
 pub enum Stitch {
     Patch(PathBuf),
@@ -26,30 +36,43 @@ impl Stitch {
     pub fn apply(&self, dir: &Path) -> Result<(), OneOf<(IoError, PatchFailed, AstGrepFailed)>> {
         match self {
             Stitch::Patch(file) => {
-                let status = Command::new("patch")
+                let output = Command::new("patch")
                     .args(["-s", "-p1"])
                     .arg("-i")
                     .arg(file)
                     .arg("-d")
                     .arg(dir)
-                    .status()
+                    .output()
                     .map_err(|e| OneOf::new(IoError(e)))?;
 
-                if !status.success() {
+                if !output.status.success() {
                     return Err(OneOf::new(PatchFailed(file.clone())));
                 }
+
+                let filename = file.file_name().unwrap_or_default().to_string_lossy();
+                cargo_status("Patching", &filename);
             }
             Stitch::SgRule(file) => {
-                let status = Command::new("sg")
+                let output = Command::new("sg")
                     .args(["scan", "-r"])
                     .arg(file)
                     .arg("--update-all")
                     .arg(dir)
-                    .status()
+                    .output()
                     .map_err(|e| OneOf::new(IoError(e)))?;
 
-                if !status.success() {
+                if !output.status.success() {
                     return Err(OneOf::new(AstGrepFailed(file.clone())));
+                }
+
+                // Reformat sg's stderr lines in cargo style
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                for line in stderr.lines() {
+                    if line.starts_with("Applied") {
+                        cargo_status("Applied", line.trim_start_matches("Applied").trim());
+                    } else if !line.is_empty() {
+                        cargo_status("Stitching", line.trim());
+                    }
                 }
             }
         }
