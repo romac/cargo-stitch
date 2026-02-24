@@ -31,19 +31,18 @@ pub fn run_wrapper() -> Result<(), WrapperError> {
         return Err(OneOf::new(exec_rustc(rustc, rustc_args)));
     };
 
-    let manifest_dir = match env::var("CARGO_MANIFEST_DIR") {
-        Ok(dir) => PathBuf::from(dir),
-        Err(_) => return Err(OneOf::new(MissingEnvVar("CARGO_MANIFEST_DIR"))),
+    let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") else {
+        return Err(OneOf::new(MissingEnvVar("CARGO_MANIFEST_DIR")));
     };
+    let manifest_dir = PathBuf::from(manifest_dir);
 
-    let workspace_root = match env::var(WORKSPACE_ROOT_ENV) {
-        Ok(dir) => PathBuf::from(dir),
-        Err(_) => return Err(OneOf::new(MissingEnvVar(WORKSPACE_ROOT_ENV))),
+    let Ok(workspace_root) = env::var(WORKSPACE_ROOT_ENV) else {
+        return Err(OneOf::new(MissingEnvVar(WORKSPACE_ROOT_ENV)));
     };
+    let workspace_root = PathBuf::from(workspace_root);
 
-    let manifest_json = match env::var(STITCH_MANIFEST_ENV) {
-        Ok(json) => json,
-        Err(_) => return Err(OneOf::new(MissingEnvVar(STITCH_MANIFEST_ENV))),
+    let Ok(manifest_json) = env::var(STITCH_MANIFEST_ENV) else {
+        return Err(OneOf::new(MissingEnvVar(STITCH_MANIFEST_ENV)));
     };
 
     let manifest: HashMap<String, StitchSet> =

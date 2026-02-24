@@ -45,6 +45,10 @@ fn check_required_tools() -> Result<(), OneOf<(MissingTool,)>> {
     Ok(())
 }
 
+/// Run the cargo-stitch process
+/// # Errors
+/// Returns an error if a required tool (like `patch` or `sg`) is missing,
+/// or if an underlying cargo build or patch operation fails.
 pub fn run() -> Result<(), Error> {
     check_required_tools().map_err(OneOf::broaden)?;
 

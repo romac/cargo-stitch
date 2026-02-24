@@ -86,7 +86,7 @@ pub struct StitchSet {
 }
 
 impl StitchSet {
-    /// Scan all `stitches/*/` subdirectories at once and return a map of pkg_name to StitchSet.
+    /// Scan all `stitches/*/` subdirectories at once and return a map of `pkg_name` to `StitchSet`.
     pub fn discover_all(
         stitches_dir: &Path,
     ) -> Result<HashMap<String, StitchSet>, OneOf<(IoError,)>> {
@@ -101,7 +101,7 @@ impl StitchSet {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| OneOf::new(IoError(e)))?;
 
-        entries.sort_by_key(|e| e.file_name());
+        entries.sort_by_key(std::fs::DirEntry::file_name);
 
         for entry in entries {
             if !entry
