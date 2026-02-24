@@ -1,7 +1,9 @@
 mod parser;
 
 use std::collections::HashMap;
+use std::error::Error;
 use std::fs;
+use std::io;
 use std::path::Path;
 
 /// A configuration value that can be a string, integer, or boolean.
@@ -11,6 +13,18 @@ pub enum Value {
     Int(i64),
     Bool(bool),
 }
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Str(s) => write!(f, "{s}"),
+            Value::Int(n) => write!(f, "{n}"),
+            Value::Bool(b) => write!(f, "{b}"),
+        }
+    }
+}
+
+pub use std::collections::hash_map::Iter as EntriesIter;
 
 impl Value {
     pub fn as_str(&self) -> Option<&str> {
@@ -35,18 +49,43 @@ impl Value {
     }
 }
 
+/// Errors that can occur when loading a config file.
+#[derive(Debug)]
+pub enum ConfigError {
+    Io(io::Error),
+    Parse(parser::ParseError),
+}
+
+impl std::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConfigError::Io(e) => write!(f, "io error: {e}"),
+            ConfigError::Parse(e) => write!(f, "parse error: {e}"),
+        }
+    }
+}
+
+impl Error for ConfigError {}
+
 /// Holds a set of key-value configuration entries.
 #[derive(Debug, Clone)]
 pub struct Config {
     entries: HashMap<String, Value>,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 impl Config {
-    /// Load configuration from a file at the given path.
-    pub fn load(path: &Path) -> Config {
-        let content = fs::read_to_string(path).unwrap();
-        let entries = parser::parse(&content).unwrap();
-        Config { entries }
+    /// Load configuration from a file at the given path. Returns an error
+    /// if the file cannot be read or the content is not valid.
+    pub fn load(path: &Path) -> Result<Config, ConfigError> {
+        let content = fs::read_to_string(path).map_err(ConfigError::Io)?;
+        let entries = parser::parse(&content).map_err(ConfigError::Parse)?;
+        Ok(Config { entries })
     }
 
     /// Create an empty configuration.
@@ -84,6 +123,16 @@ impl Config {
     /// Return the number of entries.
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    /// Returns true if the configuration is empty.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Iterate over all entries.
+    pub fn iter(&self) -> EntriesIter<'_, String, Value> {
+        self.entries.iter()
     }
 
     /// Merge another config into this one. Existing keys are overwritten.

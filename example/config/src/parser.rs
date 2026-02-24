@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::Value;
 
 /// Error type for parsing failures.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ParseError {
     pub line: usize,
     pub message: String,

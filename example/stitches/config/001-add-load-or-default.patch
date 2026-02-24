@@ -1,0 +1,17 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -135,6 +135,14 @@
+         self.entries.iter()
+     }
+
++    /// Load configuration from a file, returning a default config if loading fails.
++    pub fn load_or_default(path: &Path) -> Config {
++        match Self::load(path) {
++            Ok(cfg) => cfg,
++            Err(_) => Self::default(),
++        }
++    }
++
+     /// Merge another config into this one. Existing keys are overwritten.
+     pub fn merge(&mut self, other: Config) {
+         for (k, v) in other.entries {
