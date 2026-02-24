@@ -3,10 +3,11 @@ use std::process::Command;
 
 use terrors::OneOf;
 
-use crate::WRAPPER_ENV;
-use crate::error::{CargoFailed, IoError};
+use crate::error::{CargoFailed, IoError, MissingWorkspaceRoot};
+use crate::fs::find_workspace_root;
+use crate::{WORKSPACE_ROOT_ENV, WRAPPER_ENV};
 
-pub fn run_subcommand() -> Result<(), OneOf<(IoError, CargoFailed)>> {
+pub fn run_subcommand() -> Result<(), OneOf<(IoError, CargoFailed, MissingWorkspaceRoot)>> {
     let args: Vec<String> = env::args().collect();
 
     // cargo stitch build --release
@@ -19,10 +20,15 @@ pub fn run_subcommand() -> Result<(), OneOf<(IoError, CargoFailed)>> {
 
     let self_exe = env::current_exe().map_err(|e| OneOf::new(IoError(e)))?;
 
+    let cwd = env::current_dir().map_err(|e| OneOf::new(IoError(e)))?;
+    let workspace_root =
+        find_workspace_root(&cwd).ok_or_else(|| OneOf::new(MissingWorkspaceRoot(cwd.clone())))?;
+
     let status = Command::new("cargo")
         .args(cargo_args)
         .env("RUSTC_WORKSPACE_WRAPPER", &self_exe)
         .env(WRAPPER_ENV, "1")
+        .env(WORKSPACE_ROOT_ENV, &workspace_root)
         .status()
         .map_err(|e| OneOf::new(IoError(e)))?;
 

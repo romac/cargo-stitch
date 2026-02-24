@@ -6,8 +6,9 @@ use std::process::Command;
 
 use terrors::OneOf;
 
-use crate::error::{AstGrepFailed, IoError, MissingEnvVar, MissingWorkspaceRoot, PatchFailed};
-use crate::fs::{copy_dir_recursive, find_workspace_root};
+use crate::WORKSPACE_ROOT_ENV;
+use crate::error::{AstGrepFailed, IoError, MissingEnvVar, PatchFailed};
+use crate::fs::copy_dir_recursive;
 use crate::stitch::StitchSet;
 
 /// Execute rustc with the given arguments, replacing the current process.
@@ -16,13 +17,7 @@ fn exec_rustc(rustc: &str, args: &[String]) -> IoError {
     IoError(Command::new(rustc).args(args).exec())
 }
 
-type WrapperError = OneOf<(
-    IoError,
-    PatchFailed,
-    AstGrepFailed,
-    MissingEnvVar,
-    MissingWorkspaceRoot,
-)>;
+type WrapperError = OneOf<(IoError, PatchFailed, AstGrepFailed, MissingEnvVar)>;
 
 pub fn run_wrapper() -> Result<(), WrapperError> {
     let args: Vec<String> = env::args().collect();
@@ -39,8 +34,9 @@ pub fn run_wrapper() -> Result<(), WrapperError> {
         Err(_) => return Err(OneOf::new(MissingEnvVar("CARGO_MANIFEST_DIR"))),
     };
 
-    let Some(workspace_root) = find_workspace_root(&manifest_dir) else {
-        return Err(OneOf::new(MissingWorkspaceRoot(manifest_dir)));
+    let workspace_root = match env::var(WORKSPACE_ROOT_ENV) {
+        Ok(dir) => PathBuf::from(dir),
+        Err(_) => return Err(OneOf::new(MissingEnvVar(WORKSPACE_ROOT_ENV))),
     };
     let stitches_dir = workspace_root.join("stitches");
 
