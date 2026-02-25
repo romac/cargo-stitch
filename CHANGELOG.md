@@ -2,7 +2,16 @@
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/romac/cargo-stitch/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/romac/cargo-stitch/compare/v0.2.1...HEAD
+
+## [0.2.1] - 2026-02-25
+
+[0.2.1]: https://github.com/romac/cargo-stitch/compare/v0.2.0...v0.2.1
+
+### Fixed
+
+- Fix logic for detecting `cargo-stitch` executable
+- Change patched directory to `target/cargo-stitch`
 
 ## [0.2.0] - 2026-02-24
 
