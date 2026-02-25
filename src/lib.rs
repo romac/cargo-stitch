@@ -13,8 +13,8 @@ mod subcommand;
 mod wrapper;
 
 pub use error::{
-    AstGrepFailed, CargoFailed, IoError, MissingEnvVar, MissingTool, MissingWorkspaceRoot,
-    PatchFailed,
+    AstGrepFailed, CargoFailed, IoError, MissingEnvVar, MissingStitchSet, MissingTool,
+    MissingWorkspaceRoot, PatchFailed,
 };
 
 pub const WRAPPER_ENV: &str = "__CARGO_STITCH_WRAP";
@@ -29,6 +29,7 @@ pub type Error = OneOf<(
     MissingEnvVar,
     MissingTool,
     MissingWorkspaceRoot,
+    MissingStitchSet,
 )>;
 
 fn check_required_tools() -> Result<(), OneOf<(MissingTool,)>> {

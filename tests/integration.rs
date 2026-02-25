@@ -73,7 +73,7 @@ mod patch {
 
         create_workspace(root);
 
-        let patch_dir = root.join("stitches/crate-a");
+        let patch_dir = root.join("stitches/default/crate-a");
         fs::create_dir_all(&patch_dir).unwrap();
         fs::write(
             patch_dir.join("001-fix.patch"),
@@ -149,7 +149,7 @@ mod patch {
 
         create_workspace(root);
 
-        let patch_dir = root.join("stitches/crate-a");
+        let patch_dir = root.join("stitches/default/crate-a");
         fs::create_dir_all(&patch_dir).unwrap();
 
         // First patch: change "hello" to "step1"
@@ -213,7 +213,7 @@ mod sg_rule {
 
         create_workspace(root);
 
-        let rule_dir = root.join("stitches/crate-a");
+        let rule_dir = root.join("stitches/default/crate-a");
         fs::create_dir_all(&rule_dir).unwrap();
         fs::write(
             rule_dir.join("001-rename.yaml"),
@@ -260,7 +260,7 @@ fix: '"rewritten"'
 
         create_workspace(root);
 
-        let stitch_dir = root.join("stitches/crate-a");
+        let stitch_dir = root.join("stitches/default/crate-a");
         fs::create_dir_all(&stitch_dir).unwrap();
 
         // Patch changes "hello" to "patched"

@@ -63,3 +63,11 @@ impl std::fmt::Display for MissingWorkspaceRoot {
         )
     }
 }
+
+pub struct MissingStitchSet(pub String);
+
+impl std::fmt::Display for MissingStitchSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "stitch set not found: stitches/{}/", self.0)
+    }
+}
