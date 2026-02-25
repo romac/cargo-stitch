@@ -1,38 +1,9 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
-use std::sync::OnceLock;
-
-use cargo_metadata::MetadataCommand;
 
 fn cargo_stitch_bin() -> &'static Path {
-    static BIN: OnceLock<PathBuf> = OnceLock::new();
-    BIN.get_or_init(|| {
-        // Try next to the test executable first (standard layout)
-        let mut path = std::env::current_exe().unwrap();
-        path.pop(); // remove test binary name
-        path.pop(); // remove `deps/`
-        path.push("cargo-stitch");
-        if path.exists() {
-            return path;
-        }
-
-        // Fallback: use cargo_metadata to find the target directory, then build
-        let metadata = MetadataCommand::new()
-            .no_deps()
-            .exec()
-            .expect("failed to get cargo metadata");
-
-        let status = Command::new("cargo")
-            .args(["build", "--bin", "cargo-stitch"])
-            .status()
-            .expect("failed to run cargo build");
-        assert!(status.success(), "failed to build cargo-stitch");
-
-        let bin_path = metadata.target_directory.join("debug").join("cargo-stitch");
-
-        bin_path.into_std_path_buf()
-    })
+    Path::new(env!("CARGO_BIN_EXE_cargo-stitch"))
 }
 
 fn create_workspace(root: &Path) {
