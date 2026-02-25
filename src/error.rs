@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use camino::Utf8PathBuf;
 
 pub struct IoError(pub std::io::Error);
 
@@ -8,19 +8,19 @@ impl std::fmt::Display for IoError {
     }
 }
 
-pub struct PatchFailed(pub PathBuf);
+pub struct PatchFailed(pub Utf8PathBuf);
 
 impl std::fmt::Display for PatchFailed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "failed to apply patch: {}", self.0.display())
+        write!(f, "failed to apply patch: {}", self.0)
     }
 }
 
-pub struct AstGrepFailed(pub PathBuf);
+pub struct AstGrepFailed(pub Utf8PathBuf);
 
 impl std::fmt::Display for AstGrepFailed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "failed to apply ast-grep rule: {}", self.0.display())
+        write!(f, "failed to apply ast-grep rule: {}", self.0)
     }
 }
 
@@ -52,14 +52,14 @@ impl std::fmt::Display for MissingTool {
     }
 }
 
-pub struct MissingWorkspaceRoot(pub PathBuf);
+pub struct MissingWorkspaceRoot(pub Utf8PathBuf);
 
 impl std::fmt::Display for MissingWorkspaceRoot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "could not find workspace root from manifest directory: {}",
-            self.0.display()
+            self.0
         )
     }
 }

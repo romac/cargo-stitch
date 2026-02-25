@@ -37,6 +37,7 @@ dependencies = [
 name = "cargo-stitch"
 version = "0.2.1"
 dependencies = [
+ "camino",
  "cargo_metadata",
  "serde",
  "serde_json",

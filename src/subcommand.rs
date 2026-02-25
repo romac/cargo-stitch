@@ -1,6 +1,7 @@
 use std::env;
 use std::process::Command;
 
+use camino::Utf8PathBuf;
 use terrors::OneOf;
 
 use crate::error::{CargoFailed, IoError, MissingStitchSet, MissingWorkspaceRoot};
@@ -57,7 +58,14 @@ pub fn run_subcommand()
 
     let self_exe = env::current_exe().map_err(|e| OneOf::new(IoError(e)))?;
 
-    let cwd = env::current_dir().map_err(|e| OneOf::new(IoError(e)))?;
+    let cwd = Utf8PathBuf::from_path_buf(env::current_dir().map_err(|e| OneOf::new(IoError(e)))?)
+        .map_err(|p| {
+        OneOf::new(IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("current directory is not valid UTF-8: {}", p.display()),
+        )))
+    })?;
+
     let workspace_root =
         find_workspace_root(&cwd).ok_or_else(|| OneOf::new(MissingWorkspaceRoot(cwd.clone())))?;
 
@@ -75,7 +83,7 @@ pub fn run_subcommand()
         .args(&args.cargo_args)
         .env("RUSTC_WORKSPACE_WRAPPER", &self_exe)
         .env(WRAPPER_ENV, "1")
-        .env(WORKSPACE_ROOT_ENV, &workspace_root)
+        .env(WORKSPACE_ROOT_ENV, workspace_root.as_str())
         .env(STITCH_MANIFEST_ENV, &manifest_json)
         .status()
         .map_err(|e| OneOf::new(IoError(e)))?;
