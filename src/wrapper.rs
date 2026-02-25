@@ -8,6 +8,8 @@ use std::process::Command;
 
 use terrors::OneOf;
 
+const PATCHED_CRATES_DIR: &str = "cargo-stitch";
+
 use crate::error::{AstGrepFailed, IoError, MissingEnvVar, PatchFailed};
 use crate::fs::copy_dir_recursive;
 use crate::stitch::StitchSet;
@@ -53,7 +55,7 @@ pub fn run_wrapper() -> Result<(), WrapperError> {
         return Err(OneOf::new(exec_rustc(rustc, rustc_args)));
     };
 
-    // Copy source to target/patched-crates/<pkg_name>/
+    // Copy source to target/cargo-stitch/<pkg_name>/
     let patched_dir = patched_dir(&pkg_name, &workspace_root);
 
     if patched_dir.exists() {
@@ -108,6 +110,6 @@ pub fn run_wrapper() -> Result<(), WrapperError> {
 fn patched_dir(pkg_name: &str, workspace_root: &Path) -> PathBuf {
     workspace_root
         .join("target")
-        .join("patched-crates")
+        .join(PATCHED_CRATES_DIR)
         .join(pkg_name)
 }

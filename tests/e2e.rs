@@ -109,7 +109,7 @@ fn example_workspace_builds_and_runs() {
     );
 
     // === VERIFY PATCHED SOURCE EXISTS ===
-    let patched_config = workspace.join("target/patched-crates/config");
+    let patched_config = workspace.join("target/cargo-stitch/config");
     assert!(
         patched_config.exists(),
         "patched config crate should exist at {}",

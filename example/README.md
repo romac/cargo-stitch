@@ -78,14 +78,14 @@ cargo stitch build
 cargo stitch run
 
 # Check the patched source
-cat target/patched-crates/config/src/lib.rs
+cat target/cargo-stitch/config/src/lib.rs
 ```
 
 ## How It Works
 
 1. `cargo stitch build` invokes cargo with `RUSTC_WORKSPACE_WRAPPER` set to cargo-stitch
 2. When cargo compiles the `config` crate, cargo-stitch intercepts the rustc call
-3. cargo-stitch copies `config/` to `target/patched-crates/config/`
+3. cargo-stitch copies `config/` to `target/cargo-stitch/config/`
 4. Stitch files are applied in filename order:
    - `.patch` files via `patch -p1`
    - `.yaml`/`.yml` files via `sg scan --update-all`

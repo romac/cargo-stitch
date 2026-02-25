@@ -130,7 +130,7 @@ mod patch {
         );
 
         // Verify patched source was created
-        let patched_lib = root.join("target/patched-crates/crate-a/src/lib.rs");
+        let patched_lib = root.join("target/cargo-stitch/crate-a/src/lib.rs");
         assert!(patched_lib.exists(), "patched source should exist");
 
         let content = fs::read_to_string(&patched_lib).unwrap();
@@ -164,10 +164,10 @@ mod patch {
             "cargo stitch build failed without patches:\n{stderr}"
         );
 
-        // No patched-crates directory should exist
+        // No cargo-stitch directory should exist
         assert!(
-            !root.join("target/patched-crates").exists(),
-            "patched-crates dir should not exist when there are no patches"
+            !root.join("target/cargo-stitch").exists(),
+            "target/cargo-stitch dir should not exist when there are no patches"
         );
     }
 
@@ -219,7 +219,12 @@ mod patch {
         assert!(output.status.success(), "build failed:\n{stderr}");
 
         let content =
-            fs::read_to_string(root.join("target/patched-crates/crate-a/src/lib.rs")).unwrap();
+            fs::read_to_string(root.join("target/cargo-stitch/crate-a/src/lib.rs")).unwrap_or_else(|e| {
+                panic!(
+                    "patched source should exist after build, but was not found at target/cargo-stitch/crate-a/src/lib.rs: {e}",
+                )
+            });
+
         assert!(
             content.contains("\"step2\""),
             "patches should be applied in order, got:\n{content}"
@@ -263,7 +268,7 @@ fix: '"rewritten"'
         );
 
         // Verify ast-grep rule was applied
-        let patched_lib = root.join("target/patched-crates/crate-a/src/lib.rs");
+        let patched_lib = root.join("target/cargo-stitch/crate-a/src/lib.rs");
         assert!(patched_lib.exists(), "patched source should exist");
 
         let content = fs::read_to_string(&patched_lib).unwrap();
@@ -326,8 +331,13 @@ fix: '"both"'
             "cargo stitch build failed:\n{stderr}"
         );
 
-        let patched_lib = root.join("target/patched-crates/crate-a/src/lib.rs");
-        let content = fs::read_to_string(&patched_lib).unwrap();
+        let patched_lib = root.join("target/cargo-stitch/crate-a/src/lib.rs");
+        let content = fs::read_to_string(&patched_lib).unwrap_or_else(|e| {
+            panic!(
+                "patched source should exist after build, but was not found at {patched_lib:?}: {e}",
+            )
+        });
+
         assert!(
             content.contains("\"both\""),
             "patch should apply first, then ast-grep rule should rewrite, got:\n{content}"

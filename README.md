@@ -2,7 +2,7 @@
 
 A Cargo subcommand that applies source-level patches and [ast-grep](https://ast-grep.github.io/) rules to workspace crates before compilation.
 
-It intercepts rustc invocations via `RUSTC_WORKSPACE_WRAPPER`, copies crate sources to `target/patched-crates/<pkg>/`, applies patches and ast-grep rules from `stitches/<pkg>/`, then compiles the patched sources.
+It intercepts rustc invocations via `RUSTC_WORKSPACE_WRAPPER`, copies crate sources to `target/cargo-stitch/<pkg>/`, applies patches and ast-grep rules from `stitches/<pkg>/`, then compiles the patched sources.
 
 ## Install
 
