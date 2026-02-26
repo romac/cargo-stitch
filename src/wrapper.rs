@@ -54,17 +54,40 @@ pub fn run_wrapper() -> Result<(), WrapperError> {
         return Err(OneOf::new(exec_rustc(rustc, rustc_args)));
     };
 
-    // Copy source to target/cargo-stitch/<pkg_name>/
+    // Copy source to a per-process temp dir, apply patches there, then atomically
+    // rename into the final location.  This avoids races when the same crate is
+    // compiled concurrently (e.g. with different feature combinations): both
+    // processes produce identical patched output, so whichever rename wins is fine,
+    // and the loser simply discards its temp dir.  Any rustc that already has the
+    // previous patched files open via inodes keeps working even after the rename.
     let patched_dir = patched_dir(&pkg_name, &workspace_root);
+    let temp_dir = temp_patched_dir(&pkg_name, &workspace_root);
 
+    if temp_dir.exists() {
+        fs::remove_dir_all(&temp_dir).map_err(|e| OneOf::new(IoError(e)))?;
+    }
+
+    copy_dir_recursive(&manifest_dir, &temp_dir).map_err(|e| OneOf::new(IoError(e)))?;
+
+    // Apply stitch files in filename order
+    stitch_set.apply(&temp_dir).map_err(OneOf::broaden)?;
+
+    // Atomically replace the final patched dir.  On Linux, rename(2) fails with
+    // ENOTEMPTY if the destination is a non-empty directory, so we remove it first.
+    // The tiny window between the remove and the rename is acceptable: another
+    // process racing here will also produce an identical result.
     if patched_dir.exists() {
         fs::remove_dir_all(&patched_dir).map_err(|e| OneOf::new(IoError(e)))?;
     }
 
-    copy_dir_recursive(&manifest_dir, &patched_dir).map_err(|e| OneOf::new(IoError(e)))?;
-
-    // Apply stitch files in filename order
-    stitch_set.apply(&patched_dir).map_err(OneOf::broaden)?;
+    if let Err(e) = fs::rename(&temp_dir, &patched_dir) {
+        // Another concurrent process beat us to it.  Both produce identical output,
+        // so discard our temp dir and use their result.
+        let _ = fs::remove_dir_all(&temp_dir);
+        if !patched_dir.exists() {
+            return Err(OneOf::new(IoError(e)));
+        }
+    }
 
     // Rewrite rustc args: replace manifest_dir with patched_dir
     // Cargo may pass either absolute paths or relative paths (from workspace root),
@@ -107,4 +130,14 @@ fn patched_dir(pkg_name: &str, workspace_root: &Utf8Path) -> Utf8PathBuf {
         .join("target")
         .join(PATCHED_CRATES_DIR)
         .join(pkg_name)
+}
+
+/// A per-process temporary directory used while building the patched source.
+/// Named with a leading dot and the process ID to avoid colliding with the
+/// final `patched_dir` and with other concurrent compilations of the same crate.
+fn temp_patched_dir(pkg_name: &str, workspace_root: &Utf8Path) -> Utf8PathBuf {
+    workspace_root
+        .join("target")
+        .join(PATCHED_CRATES_DIR)
+        .join(format!(".{pkg_name}.{}", std::process::id()))
 }
