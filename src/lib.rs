@@ -32,14 +32,15 @@ pub type Error = OneOf<(
     MissingStitchSet,
 )>;
 
-fn check_required_tools() -> Result<(), OneOf<(MissingTool,)>> {
-    // Check for patch
-    if Command::new("patch").arg("--version").output().is_err() {
+pub(crate) fn check_required_tools(
+    need_patch: bool,
+    need_sg: bool,
+) -> Result<(), OneOf<(MissingTool,)>> {
+    if need_patch && Command::new("patch").arg("--version").output().is_err() {
         return Err(OneOf::new(error::MissingTool("patch")));
     }
 
-    // Check for ast-grep (sg)
-    if Command::new("sg").arg("--version").output().is_err() {
+    if need_sg && Command::new("sg").arg("--version").output().is_err() {
         return Err(OneOf::new(error::MissingTool("sg (ast-grep)")));
     }
 
@@ -54,7 +55,6 @@ pub fn run() -> Result<(), Error> {
     if env::var_os(WRAPPER_ENV).is_some() {
         wrapper::run_wrapper().map_err(OneOf::broaden)
     } else {
-        check_required_tools().map_err(OneOf::broaden)?;
         subcommand::run_subcommand().map_err(OneOf::broaden)
     }
 }

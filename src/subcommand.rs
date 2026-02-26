@@ -4,10 +4,18 @@ use std::process::Command;
 use camino::Utf8PathBuf;
 use terrors::OneOf;
 
-use crate::error::{CargoFailed, IoError, MissingStitchSet, MissingWorkspaceRoot};
+use crate::error::{CargoFailed, IoError, MissingStitchSet, MissingTool, MissingWorkspaceRoot};
 use crate::fs::find_workspace_root;
 use crate::stitch::StitchSet;
-use crate::{STITCH_MANIFEST_ENV, WORKSPACE_ROOT_ENV, WRAPPER_ENV};
+use crate::{STITCH_MANIFEST_ENV, WORKSPACE_ROOT_ENV, WRAPPER_ENV, check_required_tools};
+
+type SubcommandError = OneOf<(
+    IoError,
+    CargoFailed,
+    MissingWorkspaceRoot,
+    MissingStitchSet,
+    MissingTool,
+)>;
 
 struct CargoStitchArgs {
     set_name: String,
@@ -52,8 +60,7 @@ impl CargoStitchArgs {
     }
 }
 
-pub fn run_subcommand()
--> Result<(), OneOf<(IoError, CargoFailed, MissingWorkspaceRoot, MissingStitchSet)>> {
+pub fn run_subcommand() -> Result<(), SubcommandError> {
     let args = CargoStitchArgs::from_env();
 
     let self_exe = env::current_exe().map_err(|e| OneOf::new(IoError(e)))?;
@@ -76,6 +83,11 @@ pub fn run_subcommand()
     }
 
     let manifest = StitchSet::discover_all(&stitches_dir).map_err(OneOf::broaden)?;
+
+    let need_patch = manifest.values().any(StitchSet::needs_patch);
+    let need_sg = manifest.values().any(StitchSet::needs_sg);
+    check_required_tools(need_patch, need_sg).map_err(OneOf::broaden)?;
+
     let manifest_json =
         serde_json::to_string(&manifest).map_err(|e| OneOf::new(IoError(e.into())))?;
 

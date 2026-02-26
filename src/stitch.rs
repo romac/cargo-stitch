@@ -146,6 +146,14 @@ impl StitchSet {
         Ok(paths.into_iter().filter_map(Stitch::from_path).collect())
     }
 
+    pub fn needs_patch(&self) -> bool {
+        self.stitches.iter().any(|s| matches!(s, Stitch::Patch(_)))
+    }
+
+    pub fn needs_sg(&self) -> bool {
+        self.stitches.iter().any(|s| matches!(s, Stitch::SgRule(_)))
+    }
+
     pub fn apply(
         &self,
         dir: &Utf8Path,
