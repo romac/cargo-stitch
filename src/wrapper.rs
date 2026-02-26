@@ -42,9 +42,11 @@ pub fn run_wrapper() -> Result<(), WrapperError> {
     };
     let workspace_root = Utf8PathBuf::from(workspace_root);
 
-    let Ok(manifest_json) = env::var(STITCH_MANIFEST_ENV) else {
+    let Ok(manifest_file) = env::var(STITCH_MANIFEST_ENV) else {
         return Err(OneOf::new(MissingEnvVar(STITCH_MANIFEST_ENV)));
     };
+
+    let manifest_json = fs::read_to_string(&manifest_file).map_err(|e| OneOf::new(IoError(e)))?;
 
     let manifest: HashMap<String, StitchSet> =
         serde_json::from_str(&manifest_json).map_err(|e| OneOf::new(IoError(e.into())))?;

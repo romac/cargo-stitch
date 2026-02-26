@@ -91,14 +91,22 @@ pub fn run_subcommand() -> Result<(), SubcommandError> {
     let manifest_json =
         serde_json::to_string(&manifest).map_err(|e| OneOf::new(IoError(e.into())))?;
 
+    // Write manifest to a temp file instead of passing JSON directly via env var.
+    // Large workspaces can exceed OS env var size limits (~128 KB on Linux, ~256 KB on macOS).
+    let manifest_file =
+        std::env::temp_dir().join(format!("cargo-stitch-manifest-{}.json", std::process::id()));
+    std::fs::write(&manifest_file, &manifest_json).map_err(|e| OneOf::new(IoError(e)))?;
+
     let status = Command::new("cargo")
         .args(&args.cargo_args)
         .env("RUSTC_WORKSPACE_WRAPPER", &self_exe)
         .env(WRAPPER_ENV, "1")
         .env(WORKSPACE_ROOT_ENV, workspace_root.as_str())
-        .env(STITCH_MANIFEST_ENV, &manifest_json)
+        .env(STITCH_MANIFEST_ENV, &manifest_file)
         .status()
         .map_err(|e| OneOf::new(IoError(e)))?;
+
+    let _ = std::fs::remove_file(&manifest_file);
 
     if status.success() {
         Ok(())
