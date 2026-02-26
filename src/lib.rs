@@ -51,11 +51,10 @@ fn check_required_tools() -> Result<(), OneOf<(MissingTool,)>> {
 /// Returns an error if a required tool (like `patch` or `sg`) is missing,
 /// or if an underlying cargo build or patch operation fails.
 pub fn run() -> Result<(), Error> {
-    check_required_tools().map_err(OneOf::broaden)?;
-
     if env::var_os(WRAPPER_ENV).is_some() {
         wrapper::run_wrapper().map_err(OneOf::broaden)
     } else {
+        check_required_tools().map_err(OneOf::broaden)?;
         subcommand::run_subcommand().map_err(OneOf::broaden)
     }
 }
