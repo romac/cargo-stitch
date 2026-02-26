@@ -10,7 +10,7 @@ use terrors::OneOf;
 const PATCHED_CRATES_DIR: &str = "cargo-stitch";
 
 use crate::error::{AstGrepFailed, IoError, MissingEnvVar, PatchFailed};
-use crate::fs::copy_dir_recursive;
+use crate::fs::{copy_dir_recursive, patched_dir_is_up_to_date, write_sentinel};
 use crate::stitch::StitchSet;
 use crate::{STITCH_MANIFEST_ENV, WORKSPACE_ROOT_ENV};
 
@@ -56,39 +56,50 @@ pub fn run_wrapper() -> Result<(), WrapperError> {
         return Err(OneOf::new(exec_rustc(rustc, rustc_args)));
     };
 
-    // Copy source to a per-process temp dir, apply patches there, then atomically
-    // rename into the final location.  This avoids races when the same crate is
-    // compiled concurrently (e.g. with different feature combinations): both
-    // processes produce identical patched output, so whichever rename wins is fine,
-    // and the loser simply discards its temp dir.  Any rustc that already has the
-    // previous patched files open via inodes keeps working even after the rename.
     let patched_dir = patched_dir(&pkg_name, &workspace_root);
-    let temp_dir = temp_patched_dir(&pkg_name, &workspace_root);
+    let stitch_file_paths: Vec<&Utf8Path> = stitch_set.file_paths().collect();
 
-    if temp_dir.exists() {
-        fs::remove_dir_all(&temp_dir).map_err(|e| OneOf::new(IoError(e)))?;
-    }
+    // Skip the copy+patch if patched_dir already reflects the current sources and
+    // stitch files.  This avoids redundant I/O when the same crate is compiled
+    // multiple times in one build (e.g. different feature combinations, lib + tests).
+    if !patched_dir_is_up_to_date(&patched_dir, &manifest_dir, &stitch_file_paths) {
+        // Copy source to a per-process temp dir, apply patches there, then atomically
+        // rename into the final location.  This avoids races when the same crate is
+        // compiled concurrently (e.g. with different feature combinations): both
+        // processes produce identical patched output, so whichever rename wins is fine,
+        // and the loser simply discards its temp dir.  Any rustc that already has the
+        // previous patched files open via inodes keeps working even after the rename.
+        let temp_dir = temp_patched_dir(&pkg_name, &workspace_root);
 
-    copy_dir_recursive(&manifest_dir, &temp_dir).map_err(|e| OneOf::new(IoError(e)))?;
-
-    // Apply stitch files in filename order
-    stitch_set.apply(&temp_dir).map_err(OneOf::broaden)?;
-
-    // Atomically replace the final patched dir.  On Linux, rename(2) fails with
-    // ENOTEMPTY if the destination is a non-empty directory, so we remove it first.
-    // The tiny window between the remove and the rename is acceptable: another
-    // process racing here will also produce an identical result.
-    if patched_dir.exists() {
-        fs::remove_dir_all(&patched_dir).map_err(|e| OneOf::new(IoError(e)))?;
-    }
-
-    if let Err(e) = fs::rename(&temp_dir, &patched_dir) {
-        // Another concurrent process beat us to it.  Both produce identical output,
-        // so discard our temp dir and use their result.
-        let _ = fs::remove_dir_all(&temp_dir);
-        if !patched_dir.exists() {
-            return Err(OneOf::new(IoError(e)));
+        if temp_dir.exists() {
+            fs::remove_dir_all(&temp_dir).map_err(|e| OneOf::new(IoError(e)))?;
         }
+
+        copy_dir_recursive(&manifest_dir, &temp_dir).map_err(|e| OneOf::new(IoError(e)))?;
+
+        // Apply stitch files in filename order
+        stitch_set.apply(&temp_dir).map_err(OneOf::broaden)?;
+
+        // Atomically replace the final patched dir.  On Linux, rename(2) fails with
+        // ENOTEMPTY if the destination is a non-empty directory, so we remove it first.
+        // The tiny window between the remove and the rename is acceptable: another
+        // process racing here will also produce an identical result.
+        if patched_dir.exists() {
+            fs::remove_dir_all(&patched_dir).map_err(|e| OneOf::new(IoError(e)))?;
+        }
+
+        if let Err(e) = fs::rename(&temp_dir, &patched_dir) {
+            // Another concurrent process beat us to it.  Both produce identical output,
+            // so discard our temp dir and use their result.
+            let _ = fs::remove_dir_all(&temp_dir);
+            if !patched_dir.exists() {
+                return Err(OneOf::new(IoError(e)));
+            }
+        }
+
+        // Record when this patch run completed so future invocations can skip
+        // the copy+patch if sources and stitch files have not changed since.
+        write_sentinel(&patched_dir).map_err(|e| OneOf::new(IoError(e)))?;
     }
 
     // Rewrite rustc args: replace manifest_dir with patched_dir

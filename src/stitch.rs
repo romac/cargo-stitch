@@ -32,6 +32,12 @@ impl Stitch {
         }
     }
 
+    pub fn path(&self) -> &Utf8Path {
+        match self {
+            Stitch::Patch(p) | Stitch::SgRule(p) => p.as_path(),
+        }
+    }
+
     pub fn apply(
         &self,
         dir: &Utf8Path,
@@ -144,6 +150,10 @@ impl StitchSet {
         paths.sort();
 
         Ok(paths.into_iter().filter_map(Stitch::from_path).collect())
+    }
+
+    pub fn file_paths(&self) -> impl Iterator<Item = &Utf8Path> {
+        self.stitches.iter().map(|s| s.path())
     }
 
     pub fn needs_patch(&self) -> bool {
