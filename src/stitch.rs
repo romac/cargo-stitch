@@ -48,7 +48,12 @@ impl Stitch {
                     .map_err(|e| OneOf::new(IoError(e)))?;
 
                 if !output.status.success() {
-                    return Err(OneOf::new(PatchFailed(file.clone())));
+                    let tool_output = [output.stdout, output.stderr].concat();
+                    let output = String::from_utf8_lossy(&tool_output).into_owned();
+                    return Err(OneOf::new(PatchFailed {
+                        file: file.clone(),
+                        output,
+                    }));
                 }
 
                 let filename = file.file_name().unwrap_or_default();
@@ -64,7 +69,12 @@ impl Stitch {
                     .map_err(|e| OneOf::new(IoError(e)))?;
 
                 if !output.status.success() {
-                    return Err(OneOf::new(AstGrepFailed(file.clone())));
+                    let tool_output = [output.stdout, output.stderr].concat();
+                    let output = String::from_utf8_lossy(&tool_output).into_owned();
+                    return Err(OneOf::new(AstGrepFailed {
+                        file: file.clone(),
+                        output,
+                    }));
                 }
 
                 // Reformat sg's stderr lines in cargo style

@@ -8,19 +8,33 @@ impl std::fmt::Display for IoError {
     }
 }
 
-pub struct PatchFailed(pub Utf8PathBuf);
+pub struct PatchFailed {
+    pub file: Utf8PathBuf,
+    pub output: String,
+}
 
 impl std::fmt::Display for PatchFailed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "failed to apply patch: {}", self.0)
+        write!(f, "failed to apply patch: {}", self.file)?;
+        if !self.output.is_empty() {
+            write!(f, "\n{}", self.output.trim_end())?;
+        }
+        Ok(())
     }
 }
 
-pub struct AstGrepFailed(pub Utf8PathBuf);
+pub struct AstGrepFailed {
+    pub file: Utf8PathBuf,
+    pub output: String,
+}
 
 impl std::fmt::Display for AstGrepFailed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "failed to apply ast-grep rule: {}", self.0)
+        write!(f, "failed to apply ast-grep rule: {}", self.file)?;
+        if !self.output.is_empty() {
+            write!(f, "\n{}", self.output.trim_end())?;
+        }
+        Ok(())
     }
 }
 
