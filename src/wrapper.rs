@@ -43,7 +43,8 @@ pub fn run_wrapper() -> Result<(), WrapperError> {
     let workspace_root = Utf8PathBuf::from(workspace_root);
 
     let Ok(manifest_file) = env::var(STITCH_MANIFEST_ENV) else {
-        return Err(OneOf::new(MissingEnvVar(STITCH_MANIFEST_ENV)));
+        // Empty manifest: no stitches configured, just run rustc as-is.
+        return Err(OneOf::new(exec_rustc(rustc, rustc_args)));
     };
 
     let manifest_json = fs::read_to_string(&manifest_file).map_err(|e| OneOf::new(IoError(e)))?;

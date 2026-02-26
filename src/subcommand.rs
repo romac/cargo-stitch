@@ -1,4 +1,5 @@
 use std::env;
+use std::fs;
 use std::process::Command;
 
 use camino::Utf8PathBuf;
@@ -8,6 +9,16 @@ use crate::error::{CargoFailed, IoError, MissingStitchSet, MissingTool, MissingW
 use crate::fs::find_workspace_root;
 use crate::stitch::StitchSet;
 use crate::{STITCH_MANIFEST_ENV, WORKSPACE_ROOT_ENV, WRAPPER_ENV, check_required_tools};
+
+/// FNV-1a 64-bit hash of `data`.
+fn fnv1a_64(data: &[u8]) -> u64 {
+    let mut hash: u64 = 14695981039346656037;
+    for &byte in data {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(1099511628211);
+    }
+    hash
+}
 
 type SubcommandError = OneOf<(
     IoError,
@@ -91,22 +102,29 @@ pub fn run_subcommand() -> Result<(), SubcommandError> {
     let manifest_json =
         serde_json::to_string(&manifest).map_err(|e| OneOf::new(IoError(e.into())))?;
 
-    // Write manifest to a temp file instead of passing JSON directly via env var.
-    // Large workspaces can exceed OS env var size limits (~128 KB on Linux, ~256 KB on macOS).
-    let manifest_file =
-        std::env::temp_dir().join(format!("cargo-stitch-manifest-{}.json", std::process::id()));
-    std::fs::write(&manifest_file, &manifest_json).map_err(|e| OneOf::new(IoError(e)))?;
-
-    let status = Command::new("cargo")
+    // Write the manifest to target/cargo-stitch/ using a content hash as the filename.
+    // This makes the file content-addressable: same manifest → same file, so concurrent
+    // builds with identical manifests converge naturally.  The file is intentionally
+    // persistent — cargo clean removes it with the rest of target/.
+    // Per the critical invariant: write nothing (and create no directory) when the manifest
+    // is empty, so `target/cargo-stitch/` does not exist for crates with no stitch files.
+    let mut cargo_cmd = Command::new("cargo");
+    cargo_cmd
         .args(&args.cargo_args)
         .env("RUSTC_WORKSPACE_WRAPPER", &self_exe)
         .env(WRAPPER_ENV, "1")
-        .env(WORKSPACE_ROOT_ENV, workspace_root.as_str())
-        .env(STITCH_MANIFEST_ENV, &manifest_file)
-        .status()
-        .map_err(|e| OneOf::new(IoError(e)))?;
+        .env(WORKSPACE_ROOT_ENV, workspace_root.as_str());
 
-    let _ = std::fs::remove_file(&manifest_file);
+    if !manifest.is_empty() {
+        let hash = fnv1a_64(manifest_json.as_bytes());
+        let stitch_dir = workspace_root.join("target").join("cargo-stitch");
+        fs::create_dir_all(&stitch_dir).map_err(|e| OneOf::new(IoError(e)))?;
+        let manifest_file = stitch_dir.join(format!(".manifest-{hash:016x}.json"));
+        fs::write(&manifest_file, &manifest_json).map_err(|e| OneOf::new(IoError(e)))?;
+        cargo_cmd.env(STITCH_MANIFEST_ENV, manifest_file.as_os_str());
+    }
+
+    let status = cargo_cmd.status().map_err(|e| OneOf::new(IoError(e)))?;
 
     if status.success() {
         Ok(())
