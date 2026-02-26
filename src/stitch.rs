@@ -18,6 +18,7 @@ fn cargo_status(status: &str, message: &str) {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(tag = "type", content = "path")]
 pub enum Stitch {
     Patch(Utf8PathBuf),
     SgRule(Utf8PathBuf),
