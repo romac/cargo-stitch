@@ -12,6 +12,9 @@ It intercepts rustc invocations via `RUSTC_WORKSPACE_WRAPPER`, copies crate sour
 
 ## Install
 
+> [!IMPORTANT]
+> Requires `patch` (usually preinstalled) and [`ast-grep`](https://ast-grep.github.io/guide/quick-start.html) (`sg`) if using ast-grep rules.
+
 **Using [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall)** (recommended, downloads prebuilt binaries):
 
 ```
@@ -34,7 +37,6 @@ cd cargo-stitch
 cargo install --path .
 ```
 
-Requires `patch` (usually preinstalled) and [`ast-grep`](https://ast-grep.github.io/guide/quick-start.html) (`sg`) if using ast-grep rules.
 
 ## Usage
 
