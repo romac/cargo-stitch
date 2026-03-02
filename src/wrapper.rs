@@ -155,3 +155,35 @@ fn temp_patched_dir(pkg_name: &str, workspace_root: &Utf8Path) -> Utf8PathBuf {
         .join(PATCHED_CRATES_DIR)
         .join(format!(".{pkg_name}.{}", std::process::id()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn patched_dir_path_construction() {
+        let root = Utf8Path::new("/workspace");
+        let result = patched_dir("my-crate", root);
+        assert_eq!(
+            result,
+            Utf8PathBuf::from("/workspace/target/cargo-stitch/my-crate")
+        );
+    }
+
+    #[test]
+    fn temp_patched_dir_includes_pid() {
+        let root = Utf8Path::new("/workspace");
+        let result = temp_patched_dir("my-crate", root);
+        let pid = std::process::id();
+        assert_eq!(
+            result,
+            Utf8PathBuf::from(format!("/workspace/target/cargo-stitch/.my-crate.{pid}"))
+        );
+    }
+
+    #[test]
+    fn patched_dir_different_packages() {
+        let root = Utf8Path::new("/ws");
+        assert_ne!(patched_dir("a", root), patched_dir("b", root));
+    }
+}

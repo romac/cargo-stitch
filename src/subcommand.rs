@@ -132,3 +132,70 @@ pub fn run_subcommand() -> Result<(), SubcommandError> {
         Err(OneOf::new(CargoFailed(status.code().unwrap_or(1))))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_no_set_defaults() {
+        let args = CargoStitchArgs::parse(&["build".to_string(), "--release".to_string()]);
+        assert_eq!(args.set_name, "default");
+        assert!(!args.set_explicit);
+        assert_eq!(args.cargo_args, vec!["build", "--release"]);
+    }
+
+    #[test]
+    fn parse_with_set() {
+        let args = CargoStitchArgs::parse(&[
+            "--set".to_string(),
+            "custom".to_string(),
+            "build".to_string(),
+        ]);
+        assert_eq!(args.set_name, "custom");
+        assert!(args.set_explicit);
+        assert_eq!(args.cargo_args, vec!["build"]);
+    }
+
+    #[test]
+    fn parse_set_at_end() {
+        let args = CargoStitchArgs::parse(&[
+            "build".to_string(),
+            "--release".to_string(),
+            "--set".to_string(),
+            "myname".to_string(),
+        ]);
+        assert_eq!(args.set_name, "myname");
+        assert!(args.set_explicit);
+        assert_eq!(args.cargo_args, vec!["build", "--release"]);
+    }
+
+    #[test]
+    fn parse_set_without_value_defaults() {
+        let args = CargoStitchArgs::parse(&["--set".to_string()]);
+        assert_eq!(args.set_name, "default");
+        assert!(!args.set_explicit);
+    }
+
+    #[test]
+    fn fnv1a_64_empty() {
+        let h = fnv1a_64(b"");
+        assert_eq!(h, 14695981039346656037);
+    }
+
+    #[test]
+    fn fnv1a_64_known_values() {
+        let h1 = fnv1a_64(b"hello");
+        let h2 = fnv1a_64(b"world");
+        assert_ne!(h1, h2);
+        // Verify stability
+        assert_eq!(fnv1a_64(b"hello"), h1);
+    }
+
+    #[test]
+    fn fnv1a_64_different_inputs_differ() {
+        let h1 = fnv1a_64(b"abc");
+        let h2 = fnv1a_64(b"abd");
+        assert_ne!(h1, h2);
+    }
+}

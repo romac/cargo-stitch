@@ -175,3 +175,172 @@ impl StitchSet {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn stitch_from_path_patch() {
+        let s = Stitch::from_path(Utf8PathBuf::from("fix.patch"));
+        assert!(matches!(s, Some(Stitch::Patch(_))));
+    }
+
+    #[test]
+    fn stitch_from_path_yaml() {
+        let s = Stitch::from_path(Utf8PathBuf::from("rule.yaml"));
+        assert!(matches!(s, Some(Stitch::SgRule(_))));
+    }
+
+    #[test]
+    fn stitch_from_path_yml() {
+        let s = Stitch::from_path(Utf8PathBuf::from("rule.yml"));
+        assert!(matches!(s, Some(Stitch::SgRule(_))));
+    }
+
+    #[test]
+    fn stitch_from_path_txt_returns_none() {
+        assert!(Stitch::from_path(Utf8PathBuf::from("readme.txt")).is_none());
+    }
+
+    #[test]
+    fn stitch_from_path_no_extension_returns_none() {
+        assert!(Stitch::from_path(Utf8PathBuf::from("Makefile")).is_none());
+    }
+
+    #[test]
+    fn stitch_path_returns_inner() {
+        let p = Utf8PathBuf::from("stitches/default/crate-a/001.patch");
+        let s = Stitch::Patch(p.clone());
+        assert_eq!(s.path(), p.as_path());
+
+        let p2 = Utf8PathBuf::from("stitches/default/crate-a/002.yaml");
+        let s2 = Stitch::SgRule(p2.clone());
+        assert_eq!(s2.path(), p2.as_path());
+    }
+
+    #[test]
+    fn discover_all_nonexistent_dir() {
+        let result =
+            StitchSet::discover_all(Utf8Path::new("/nonexistent/stitches/default")).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn discover_all_with_stitch_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = Utf8Path::from_path(tmp.path()).unwrap();
+        let stitches_dir = base.join("stitches");
+
+        let pkg_dir = stitches_dir.join("crate-a");
+        fs::create_dir_all(&pkg_dir).unwrap();
+        fs::write(pkg_dir.join("001.patch"), "").unwrap();
+        fs::write(pkg_dir.join("002.yaml"), "").unwrap();
+
+        let result = StitchSet::discover_all(&stitches_dir).unwrap();
+        assert!(result.contains_key("crate-a"));
+        assert_eq!(result["crate-a"].stitches.len(), 2);
+    }
+
+    #[test]
+    fn discover_all_empty_subdir_filtered_out() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = Utf8Path::from_path(tmp.path()).unwrap();
+        let stitches_dir = base.join("stitches");
+
+        let pkg_dir = stitches_dir.join("empty-crate");
+        fs::create_dir_all(&pkg_dir).unwrap();
+        // No stitch files, just a non-stitch file
+        fs::write(pkg_dir.join("readme.txt"), "").unwrap();
+
+        let result = StitchSet::discover_all(&stitches_dir).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn discover_in_returns_sorted_and_filters() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = Utf8Path::from_path(tmp.path()).unwrap();
+
+        fs::write(dir.join("002.yaml"), "").unwrap();
+        fs::write(dir.join("001.patch"), "").unwrap();
+        fs::write(dir.join("readme.txt"), "").unwrap();
+
+        let stitches = StitchSet::discover_in(dir).unwrap();
+        assert_eq!(stitches.len(), 2);
+        assert!(matches!(&stitches[0], Stitch::Patch(p) if p.file_name() == Some("001.patch")));
+        assert!(matches!(&stitches[1], Stitch::SgRule(p) if p.file_name() == Some("002.yaml")));
+    }
+
+    #[test]
+    fn needs_patch_and_needs_sg() {
+        let set = StitchSet {
+            stitches: vec![
+                Stitch::Patch(Utf8PathBuf::from("a.patch")),
+                Stitch::SgRule(Utf8PathBuf::from("b.yaml")),
+            ],
+        };
+        assert!(set.needs_patch());
+        assert!(set.needs_sg());
+
+        let patch_only = StitchSet {
+            stitches: vec![Stitch::Patch(Utf8PathBuf::from("a.patch"))],
+        };
+        assert!(patch_only.needs_patch());
+        assert!(!patch_only.needs_sg());
+
+        let sg_only = StitchSet {
+            stitches: vec![Stitch::SgRule(Utf8PathBuf::from("b.yml"))],
+        };
+        assert!(!sg_only.needs_patch());
+        assert!(sg_only.needs_sg());
+
+        let empty = StitchSet { stitches: vec![] };
+        assert!(!empty.needs_patch());
+        assert!(!empty.needs_sg());
+    }
+
+    #[test]
+    fn file_paths_returns_all() {
+        let set = StitchSet {
+            stitches: vec![
+                Stitch::Patch(Utf8PathBuf::from("a.patch")),
+                Stitch::SgRule(Utf8PathBuf::from("b.yaml")),
+            ],
+        };
+        let paths: Vec<_> = set.file_paths().collect();
+        assert_eq!(
+            paths,
+            vec![Utf8Path::new("a.patch"), Utf8Path::new("b.yaml")]
+        );
+    }
+
+    #[test]
+    fn serde_round_trip_stitch() {
+        let patch = Stitch::Patch(Utf8PathBuf::from("fix.patch"));
+        let json = serde_json::to_string(&patch).unwrap();
+        let deser: Stitch = serde_json::from_str(&json).unwrap();
+        assert_eq!(deser.path(), Utf8Path::new("fix.patch"));
+
+        let rule = Stitch::SgRule(Utf8PathBuf::from("rule.yml"));
+        let json = serde_json::to_string(&rule).unwrap();
+        let deser: Stitch = serde_json::from_str(&json).unwrap();
+        assert_eq!(deser.path(), Utf8Path::new("rule.yml"));
+    }
+
+    #[test]
+    fn serde_round_trip_stitch_set() {
+        let set = StitchSet {
+            stitches: vec![
+                Stitch::Patch(Utf8PathBuf::from("a.patch")),
+                Stitch::SgRule(Utf8PathBuf::from("b.yaml")),
+            ],
+        };
+        let json = serde_json::to_string(&set).unwrap();
+        let deser: StitchSet = serde_json::from_str(&json).unwrap();
+        assert_eq!(deser.stitches.len(), 2);
+        assert_eq!(deser.stitches[0].path(), Utf8Path::new("a.patch"));
+        assert_eq!(deser.stitches[1].path(), Utf8Path::new("b.yaml"));
+    }
+}

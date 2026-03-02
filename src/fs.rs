@@ -108,3 +108,126 @@ fn any_file_newer_than(dir: &Utf8Path, threshold: SystemTime) -> bool {
     }
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn copy_dir_recursive_basic() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = Utf8Path::from_path(tmp.path()).unwrap().join("src");
+        let dst = Utf8Path::from_path(tmp.path()).unwrap().join("dst");
+
+        fs::create_dir_all(src.join("sub")).unwrap();
+        fs::write(src.join("a.rs"), "fn a() {}").unwrap();
+        fs::write(src.join("sub/b.rs"), "fn b() {}").unwrap();
+
+        copy_dir_recursive(&src, &dst).unwrap();
+
+        assert_eq!(fs::read_to_string(dst.join("a.rs")).unwrap(), "fn a() {}");
+        assert_eq!(
+            fs::read_to_string(dst.join("sub/b.rs")).unwrap(),
+            "fn b() {}"
+        );
+    }
+
+    #[test]
+    fn copy_dir_recursive_skips_target_and_git() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = Utf8Path::from_path(tmp.path()).unwrap().join("src");
+        let dst = Utf8Path::from_path(tmp.path()).unwrap().join("dst");
+
+        fs::create_dir_all(src.join("target")).unwrap();
+        fs::write(src.join("target/debug"), "binary").unwrap();
+        fs::create_dir_all(src.join(".git")).unwrap();
+        fs::write(src.join(".git/HEAD"), "ref").unwrap();
+        fs::write(src.join("lib.rs"), "code").unwrap();
+
+        copy_dir_recursive(&src, &dst).unwrap();
+
+        assert!(dst.join("lib.rs").exists());
+        assert!(!dst.join("target").exists());
+        assert!(!dst.join(".git").exists());
+    }
+
+    #[test]
+    fn patched_dir_up_to_date_no_sentinel() {
+        let tmp = tempfile::tempdir().unwrap();
+        let patched = Utf8Path::from_path(tmp.path()).unwrap().join("patched");
+        let manifest = Utf8Path::from_path(tmp.path()).unwrap().join("manifest");
+        fs::create_dir_all(&patched).unwrap();
+        fs::create_dir_all(&manifest).unwrap();
+
+        assert!(!patched_dir_is_up_to_date(&patched, &manifest, &[]));
+    }
+
+    #[test]
+    fn patched_dir_up_to_date_fresh() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = Utf8Path::from_path(tmp.path()).unwrap();
+        let patched = base.join("patched");
+        let manifest = base.join("manifest");
+        fs::create_dir_all(&patched).unwrap();
+        fs::create_dir_all(&manifest).unwrap();
+
+        // Create source file first
+        fs::write(manifest.join("lib.rs"), "code").unwrap();
+        // Small delay to ensure sentinel is newer
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        // Then write sentinel
+        write_sentinel(&patched).unwrap();
+
+        assert!(patched_dir_is_up_to_date(&patched, &manifest, &[]));
+    }
+
+    #[test]
+    fn patched_dir_stale_stitch_file_newer() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = Utf8Path::from_path(tmp.path()).unwrap();
+        let patched = base.join("patched");
+        let manifest = base.join("manifest");
+        fs::create_dir_all(&patched).unwrap();
+        fs::create_dir_all(&manifest).unwrap();
+
+        write_sentinel(&patched).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Stitch file written after sentinel
+        let stitch = base.join("fix.patch");
+        fs::write(&stitch, "patch").unwrap();
+
+        let stitch_ref = Utf8Path::new(stitch.as_str());
+        assert!(!patched_dir_is_up_to_date(
+            &patched,
+            &manifest,
+            &[stitch_ref]
+        ));
+    }
+
+    #[test]
+    fn patched_dir_stale_source_file_newer() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = Utf8Path::from_path(tmp.path()).unwrap();
+        let patched = base.join("patched");
+        let manifest = base.join("manifest");
+        fs::create_dir_all(&patched).unwrap();
+        fs::create_dir_all(&manifest).unwrap();
+
+        write_sentinel(&patched).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Source file written after sentinel
+        fs::write(manifest.join("lib.rs"), "new code").unwrap();
+
+        assert!(!patched_dir_is_up_to_date(&patched, &manifest, &[]));
+    }
+
+    #[test]
+    fn write_sentinel_creates_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = Utf8Path::from_path(tmp.path()).unwrap();
+        write_sentinel(dir).unwrap();
+        assert!(dir.join(SENTINEL_FILE).exists());
+    }
+}
