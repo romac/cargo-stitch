@@ -203,6 +203,78 @@ mod patch {
     }
 }
 
+mod set_flag {
+    use super::*;
+
+    #[test]
+    fn build_with_explicit_set() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+
+        create_workspace(root);
+
+        // Put stitches under stitches/myname/ instead of stitches/default/
+        let patch_dir = root.join("stitches/myname/crate-a");
+        fs::create_dir_all(&patch_dir).unwrap();
+        fs::write(
+            patch_dir.join("001-fix.patch"),
+            r#"--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,3 @@
+ pub fn greeting() -> &'static str {
+-    "hello"
++    "from-set"
+ }
+"#,
+        )
+        .unwrap();
+
+        let output = Command::new(cargo_stitch_bin())
+            .args(["stitch", "--set", "myname", "build"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "cargo stitch --set myname build failed:\n{stderr}"
+        );
+
+        let patched_lib = root.join("target/cargo-stitch/crate-a/src/lib.rs");
+        let content = fs::read_to_string(&patched_lib).unwrap();
+        assert!(
+            content.contains("\"from-set\""),
+            "patched source should contain the set-specific string, got:\n{content}"
+        );
+    }
+
+    #[test]
+    fn build_with_nonexistent_set_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+
+        create_workspace(root);
+
+        let output = Command::new(cargo_stitch_bin())
+            .args(["stitch", "--set", "nonexistent", "build"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+
+        assert!(
+            !output.status.success(),
+            "cargo stitch --set nonexistent should fail"
+        );
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("stitch set not found"),
+            "error should mention missing stitch set, got:\n{stderr}"
+        );
+    }
+}
+
 mod sg_rule {
     use super::*;
 
