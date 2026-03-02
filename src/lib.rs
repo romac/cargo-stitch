@@ -40,8 +40,8 @@ pub(crate) fn check_required_tools(
         return Err(OneOf::new(error::MissingTool("patch")));
     }
 
-    if need_sg && Command::new("sg").arg("--version").output().is_err() {
-        return Err(OneOf::new(error::MissingTool("sg (ast-grep)")));
+    if need_sg && Command::new("ast-grep").arg("--version").output().is_err() {
+        return Err(OneOf::new(error::MissingTool("ast-grep")));
     }
 
     Ok(())
@@ -49,7 +49,7 @@ pub(crate) fn check_required_tools(
 
 /// Run the cargo-stitch process
 /// # Errors
-/// Returns an error if a required tool (like `patch` or `sg`) is missing,
+/// Returns an error if a required tool (like `patch` or `ast-grep`) is missing,
 /// or if an underlying cargo build or patch operation fails.
 pub fn run() -> Result<(), Error> {
     if env::var_os(WRAPPER_ENV).is_some() {

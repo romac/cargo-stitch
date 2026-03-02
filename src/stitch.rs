@@ -67,7 +67,7 @@ impl Stitch {
                 cargo_status("Patching", filename);
             }
             Stitch::SgRule(file) => {
-                let output = Command::new("sg")
+                let output = Command::new("ast-grep")
                     .args(["scan", "-r"])
                     .arg(file.as_str())
                     .arg("--update-all")
@@ -84,7 +84,7 @@ impl Stitch {
                     }));
                 }
 
-                // Reformat sg's stderr lines in cargo style
+                // Reformat ast-grep's stderr lines in cargo style
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 for line in stderr.lines() {
                     if line.starts_with("Applied") {
