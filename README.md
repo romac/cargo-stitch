@@ -52,7 +52,7 @@ cargo stitch check
 Place stitch files in `stitches/<crate-name>/` at the workspace root:
 
 - **`.patch`** -- unified diff format, applied with `patch -p1`
-- **`.yaml` / `.yml`** -- ast-grep rule files, applied with `sg scan -r <rule> --update-all`
+- **`.yaml` / `.yml`** -- ast-grep rule files, applied with `ast-grep scan -r <rule> --update-all`
 
 All stitch files are applied in filename order regardless of type. Use numeric prefixes for ordering:
 
